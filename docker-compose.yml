@@ -1,0 +1,28 @@
+# 单色海报 agent 网关 — DSH 侧容器（调研报告 §4 架构，实现待办②）
+# 密钥从项目根 .env 读取（见 .env.example 同名变量）；网关/前端容器待办③④再加。
+services:
+  dsh:
+    build:
+      context: .
+      dockerfile: docker/dsh/Dockerfile
+    image: mono-poster-dsh:latest
+    container_name: dsh
+    ports:
+      # dsh-webapi 的 REST/SSE 挂在 dsh web 宿主端口的 /api/v1 下
+      - "3080:3080"
+    environment:
+      # 网关 → DSH 的数据面鉴权（dsh-web-service 配置 apiKey，非空即强制开启）
+      DSH_WEB_API_KEY: ${DSH_WEB_API_KEY:?在 .env 中设置 DSH_WEB_API_KEY}
+      # 路由模型凭据：DSH DeepSeek adapter 按 apiKeyEnv 读取
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:?在 .env 中设置 DEEPSEEK_API_KEY}
+      # MCP 图像服务（ADR-0003：DSH 内经 MCP 调 APIMart gpt-image-2）
+      APIMART_API_KEY: ${APIMART_API_KEY:?在 .env 中设置 APIMART_API_KEY}
+      APIMART_BASE_URL: ${APIMART_BASE_URL:-https://api.apimart.ai/v1}
+      APIMART_IMAGE_MODEL: ${APIMART_IMAGE_MODEL:-gpt-image-2}
+    volumes:
+      # 会话、附件、插件 profile 状态；首次启动从镜像继承 skills 与 profile
+      - dsh-home:/root/.dsh
+    restart: unless-stopped
+
+volumes:
+  dsh-home:
