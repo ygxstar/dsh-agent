@@ -1,0 +1,18 @@
+{
+  "name": "dsh-agent",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "gateway",
+    "stub-dsh",
+    "frontend"
+  ],
+  "scripts": {
+    "dev:gateway": "npm -w gateway run dev",
+    "dev:stub": "npm -w stub-dsh run dev",
+    "dev:frontend": "npm -w frontend run dev",
+    "build": "npm -w frontend run build && npm -w gateway run build",
+    "test": "npm -w gateway run test",
+    "e2e": "npm -w frontend run build && npm -w gateway run e2e"
+  }
+}

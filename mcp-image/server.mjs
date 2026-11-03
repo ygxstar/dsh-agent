@@ -2,6 +2,8 @@
 // apimart-image：零依赖 MCP stdio 服务器，暴露 generate_image 工具（ADR-0003）。
 // 传输：换行分隔的 JSON-RPC 2.0（MCP stdio 约定）。
 // APIMart gpt-image-2 为异步任务：POST /images/generations 取 task_id → GET /tasks/{id} 轮询。
+import { mkdirSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
 import readline from 'node:readline';
 
 const BASE = (process.env.APIMART_BASE_URL || 'https://api.apimart.ai/v1').replace(/\/+$/, '');
@@ -54,6 +56,13 @@ const GENERATE_TOOL = {
         description: '输出像素档位，默认 1k',
       },
       nsfw_check: { type: 'boolean', description: '提交前先过内容审核，默认 false' },
+      save_path: {
+        type: 'string',
+        description:
+          '图片落盘的绝对路径（推荐，用 pwd 查看当前工作区）。' +
+          '提供后图片直接写入该文件，工具只返回路径与字节数，不返回图像内容——' +
+          '大幅图像经会话回传会撑爆上下文导致渲染失败，凡是要把图保存到工作区都应传本参数。',
+      },
     },
     required: ['prompt'],
   },
@@ -165,7 +174,16 @@ async function generateImage(args) {
 async function handleToolsCall(id, params) {
   try {
     if (params?.name !== 'generate_image') throw new Error(`未知工具: ${params?.name}`);
-    const { taskId, buf, mime } = await generateImage(params.arguments || {});
+    const args = params.arguments || {};
+    const { taskId, buf, mime } = await generateImage(args);
+    if (typeof args.save_path === 'string' && args.save_path) {
+      // 直接落盘、只回路径：大 base64 图像块经会话回传会撑爆 harness 渲染
+      const target = path.resolve(args.save_path);
+      mkdirSync(path.dirname(target), { recursive: true });
+      writeFileSync(target, buf);
+      reply(id, { content: [{ type: 'text', text: `生成完成 task_id=${taskId} 已保存到 ${target} mime=${mime} bytes=${buf.length}` }] });
+      return;
+    }
     reply(id, {
       content: [
         { type: 'text', text: `生成完成 task_id=${taskId} mime=${mime} bytes=${buf.length}` },

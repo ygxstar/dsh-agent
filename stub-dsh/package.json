@@ -1,0 +1,22 @@
+{
+  "name": "stub-dsh",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "dsh-webapi 行为桩：供网关单测与前后台联调使用",
+  "exports": {
+    ".": "./src/stub.ts"
+  },
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts"
+  },
+  "dependencies": {
+    "busboy": "^1.6.0"
+  },
+  "devDependencies": {
+    "@types/busboy": "^1.5.4",
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2"
+  }
+}

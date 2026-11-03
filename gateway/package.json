@@ -1,0 +1,27 @@
+{
+  "name": "gateway",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/bin.ts",
+    "start": "node dist/bin.js",
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "e2e": "vitest run test/e2e.test.ts"
+  },
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "busboy": "^1.6.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/busboy": "^1.5.4",
+    "@types/node": "^22.10.0",
+    "@types/ws": "^8.5.13",
+    "playwright": "^1.64.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

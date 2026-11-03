@@ -1,5 +1,7 @@
-# 单色海报 agent 网关 — DSH 侧容器（调研报告 §4 架构，实现待办②）
-# 密钥从项目根 .env 读取（见 .env.example 同名变量）；网关/前端容器待办③④再加。
+# 单色海报 agent 网关 — 双容器编排（调研报告 §4 架构）：
+#   dsh     = DSH + dsh-webapi 插件 + mono-color 技能 + MCP 图像服务
+#   gateway = 网关进程 + 前端静态产物（公网入口，8080）
+# 密钥从项目根 .env 读取（见 .env.example 同名变量）。
 services:
   dsh:
     build:
@@ -22,6 +24,27 @@ services:
     volumes:
       # 会话、附件、插件 profile 状态；首次启动从镜像继承 skills 与 profile
       - dsh-home:/root/.dsh
+    restart: unless-stopped
+
+  gateway:
+    build:
+      context: .
+      dockerfile: docker/gateway/Dockerfile
+    image: mono-poster-gateway:latest
+    container_name: gateway
+    ports:
+      # 公网入口：HTTP + WS（/ws 升级）与前端静态页
+      - "8080:8080"
+    environment:
+      # 仅容器内网可达；DSH_WEB_API_KEY 只存在于 dsh 与 gateway 两侧
+      DSH_BASE_URL: http://dsh:3080/api/v1
+      DSH_WEB_API_KEY: ${DSH_WEB_API_KEY:?在 .env 中设置 DSH_WEB_API_KEY}
+      # 前端构建产物由网关托管（docker/gateway/Dockerfile 已内置）
+      STATIC_DIR: /app/frontend/dist
+      # admin API 绑容器回环、不发布宿主端口（backend-design §8）
+      GATEWAY_ADMIN_HOST: 127.0.0.1
+    depends_on:
+      - dsh
     restart: unless-stopped
 
 volumes:
