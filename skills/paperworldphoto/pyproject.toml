@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "paperworldphoto"
+version = "1.3.0"
+description = "Universal AI Agent Skill for transforming photos into high-density 3D handcrafted paper art diorama worlds."
+readme = "README.md"
+license = { text = "MIT" }
+authors = [{ name = "zjml0522-spec" }]
+dependencies = [
+    "pyyaml>=6.0",
+]
+keywords = ["agent", "skill", "papercraft", "diorama", "diffusion", "ai-art", "codex", "antigravity", "mcp"]
+
+[project.scripts]
+paperworldphoto = "paperworldphoto.cli:main"

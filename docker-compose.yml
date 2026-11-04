@@ -35,14 +35,16 @@ services:
     ports:
       # 公网入口：HTTP + WS（/ws 升级）与前端静态页
       - "8080:8080"
+      # 签发页/管理 API：仅宿主回环，供 nginx /admin（Basic Auth）反代
+      - "127.0.0.1:8081:8081"
     environment:
       # 仅容器内网可达；DSH_WEB_API_KEY 只存在于 dsh 与 gateway 两侧
       DSH_BASE_URL: http://dsh:3080/api/v1
       DSH_WEB_API_KEY: ${DSH_WEB_API_KEY:?在 .env 中设置 DSH_WEB_API_KEY}
       # 前端构建产物由网关托管（docker/gateway/Dockerfile 已内置）
       STATIC_DIR: /app/frontend/dist
-      # admin API 绑容器回环、不发布宿主端口（backend-design §8）
-      GATEWAY_ADMIN_HOST: 127.0.0.1
+      # admin 绑全网卡容器口；宿主仅 127.0.0.1:8081 发布（nginx /admin + auth 暴露）
+      GATEWAY_ADMIN_HOST: 0.0.0.0
     depends_on:
       - dsh
     restart: unless-stopped

@@ -85,9 +85,9 @@ describe.skipIf(!hasDist)('端到端：浏览器 × 网关 × stub', () => {
     await page.waitForSelector('.thumb-list li', { timeout: 15_000 });
     expect(await page.locator('.thumb-list li').count()).toBe(2);
 
-    /* 4. 选 2 技能（单色需源图 + 文字海报纯文生图）→ 预览 2×2=4 格 → 提交 */
+    /* 4. 选 2 技能（单色海报 + 照片故事风格，均需源图）→ 预览 2×2=4 格 → 提交 */
     await page.getByRole('button', { name: /单色海报/ }).click();
-    await page.getByRole('button', { name: /文字海报/ }).click();
+    await page.getByRole('button', { name: /照片故事风格/ }).click();
     await page.fill('#param-title', '向北步行');
     await expect.poll(() => page.locator('.panel').filter({ hasText: '将生成 4 个出图单元' }).count()).toBe(1);
     await page.getByRole('button', { name: '开始生成' }).click();

@@ -23,7 +23,7 @@ export interface StubOptions {
   delayMs?: number;
   /** 这些技能的 prompt-stream 直接 500 —— 用于失败隔离测试 */
   failSkills?: string[];
-  /** GET /skills 返回体（默认与网关 STATIC_MANIFEST 同构的三技能） */
+  /** GET /skills 返回体（默认与网关 STATIC_MANIFEST 同构的六技能） */
   skills?: unknown[];
 }
 
@@ -38,49 +38,23 @@ export interface StubDsh {
 }
 
 const DEFAULT_SKILLS = [
-  {
-    id: 'mono-color',
-    displayName: '单色海报',
-    kind: 'img2img',
-    requiresSourceImage: true,
-    paramsSchema: {
-      type: 'object',
-      properties: {
-        title: { type: 'string', maxLength: 40, description: '海报标题' },
-        density: { type: 'string', enum: ['coarse', 'fine'], description: '网点密度' },
-      },
-      required: ['title'],
-    },
+  'mono-color',
+  'paperworldphoto',
+  'photo-story',
+  'real-qgraffiti-illusion',
+  'second-world-poster',
+  'western-animation-concept-portrait',
+].map((id) => ({
+  id,
+  displayName: id,
+  kind: 'img2img',
+  requiresSourceImage: true,
+  paramsSchema: {
+    type: 'object',
+    properties: { title: { type: 'string', maxLength: 40, description: '标题' } },
+    required: ['title'],
   },
-  {
-    id: 'duo-poster',
-    displayName: '双色海报',
-    kind: 'img2img',
-    requiresSourceImage: true,
-    paramsSchema: {
-      type: 'object',
-      properties: {
-        title: { type: 'string', maxLength: 40, description: '海报标题' },
-        palette: { type: 'string', enum: ['cobalt-ivory', 'ink-mint'], description: '配色' },
-      },
-      required: ['title'],
-    },
-  },
-  {
-    id: 'text-poster',
-    displayName: '文字海报',
-    kind: 'txt2img',
-    requiresSourceImage: false,
-    paramsSchema: {
-      type: 'object',
-      properties: {
-        title: { type: 'string', maxLength: 40, description: '海报标题' },
-        style: { type: 'string', enum: ['minimal', 'brutal'], description: '风格' },
-      },
-      required: ['title'],
-    },
-  },
-];
+}));
 
 const MIME_BY_EXT: Record<string, string> = {
   '.png': 'image/png',

@@ -16,6 +16,8 @@ export class FakeDsh implements DshClient {
   deltaMs = 0;
   /** 挂起的技能 → release() 后才继续 */
   private readonly holds = new Map<string, Array<() => void>>();
+  /** true = promptStream 正常收尾但不落图（模拟 agent 跑完却零产出） */
+  silentOutputs = false;
   private readonly heldSkills = new Set<string>();
   private sessionSeq = 0;
   private outputSeq = new Map<string, number>();
@@ -59,6 +61,7 @@ export class FakeDsh implements DshClient {
       onDelta(d);
     }
     // 落一张产出图
+    if (this.silentOutputs) return;
     const n = (this.outputSeq.get(sessionId) ?? 0) + 1;
     this.outputSeq.set(sessionId, n);
     const files = this.sessions.get(sessionId);

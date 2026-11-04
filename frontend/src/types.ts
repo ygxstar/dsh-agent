@@ -88,6 +88,13 @@ export interface ParamField {
   enum?: string[];
   description?: string;
   maxLength?: number;
+  /** 与 enum 等长的中文显示名，缺省回退为 enum 值 */
+  enumLabels?: string[];
+  minimum?: number;
+  maximum?: number;
+  default?: unknown;
+  /** 级联：本字段 enum 按 `${依赖字段值}-` 前缀过滤（photo-story 风格名） */
+  'x-filter'?: string;
 }
 export interface ParamsSchema {
   type?: string;

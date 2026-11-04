@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { fetchSkills } from '../api';
 import CellCard from '../components/CellCard';
 import ConfirmBar from '../components/ConfirmBar';
@@ -7,7 +7,7 @@ import ParamsForm from '../components/ParamsForm';
 import SkillPicker from '../components/SkillPicker';
 import UploadArea from '../components/UploadArea';
 import { errorText, FORM_ERROR_CODES } from '../errors';
-import { fieldsFor } from '../form';
+import { defaultsFor, fieldsFor, withCascade } from '../form';
 import { removeToken, tokenForTask } from '../tokens';
 import {
   addOutput,
@@ -26,10 +26,21 @@ interface ErrView {
   retryable: boolean;
 }
 
+/** 由技能页跳入时携带的预绑定信息（/skill/:skillId → /task/:taskId） */
+interface PreselectState {
+  preselect?: string;
+  params?: Record<string, unknown>;
+  text?: string;
+}
+
 export default function TaskPage() {
   const { taskId = '' } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const stored = tokenForTask(taskId);
+
+  /* 技能页预绑定：取一次存入 ref，供 WS 回调与技能选择器读取 */
+  const pre = useRef<PreselectState | null>((location.state as PreselectState | null) ?? null);
 
   /* ---- 清单与连接 ---- */
   const [skills, setSkills] = useState<SkillManifest[]>([]);
@@ -68,8 +79,16 @@ export default function TaskPage() {
         setCells((prev) => rebuildCells(m.cells, prev));
         if (!presetApplied.current) {
           presetApplied.current = true;
-          setParams(m.preset.params);
-          setText(m.preset.text);
+          const p = pre.current;
+          if (p?.preselect) {
+            // 技能页跳入：预绑定该技能并套用技能页选好的效果参数
+            setSelected([p.preselect]);
+            setParams({ ...m.preset.params, ...p.params });
+            setText(p.text ?? m.preset.text);
+          } else {
+            setParams(m.preset.params);
+            setText(m.preset.text);
+          }
         }
         break;
       }
@@ -152,6 +171,11 @@ export default function TaskPage() {
     [skills, preset],
   );
 
+  /* 技能页预绑定：技能选择器只显示该技能（等效锁定） */
+  const preselectId = pre.current?.preselect;
+  const pickerSkills = preselectId ? allowedSkills.filter((s) => s.id === preselectId) : allowedSkills;
+  const preselectForbidden = Boolean(preselectId && preset && pickerSkills.length === 0);
+
   const expanded = Object.keys(cells).length > 0;
   const running = Object.values(cells).some((c) => c.state === 'RUNNING' || c.state === 'CREATED');
   const awaiting = taskState === 'AWAITING_MODIFY_OR_CONFIRM';
@@ -205,6 +229,18 @@ export default function TaskPage() {
   }, [cells]);
 
   const fields = fieldsFor(allowedSkills, selected);
+
+  /** 勾选技能时并入其 schema 默认值（不覆盖已填项） */
+  const toggleSkill = (id: string): void => {
+    const adding = !selected.includes(id);
+    setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+    if (adding) setParams((p) => ({ ...defaultsFor(allowedSkills.find((s) => s.id === id)), ...p }));
+  };
+
+  /** 参数变更；级联字段（x-filter）按依赖值同步收窄并纠正越界旧值 */
+  const onParamChange = (k: string, v: unknown): void => {
+    setParams((p) => withCascade(fields, p, k, v));
+  };
 
   if (done) {
     return (
@@ -271,13 +307,12 @@ export default function TaskPage() {
           <section className="panel">
             <h2>选择技能</h2>
             <SkillPicker
-              skills={allowedSkills}
+              skills={pickerSkills}
               selected={selected}
-              onToggle={(id) =>
-                setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
-              }
+              onToggle={toggleSkill}
               disabled={submitting}
             />
+            {preselectForbidden && <p className="form-error">本任务预设不含该技能</p>}
             {formErr && <p className="form-error">{errorText(formErr.code, formErr.message)}</p>}
             {missingSource && <p className="form-error">所选技能需要先上传源图</p>}
             {overLimit && (
@@ -295,7 +330,7 @@ export default function TaskPage() {
             <ParamsForm
               fields={fields}
               values={params}
-              onChange={(k, v) => setParams((p) => ({ ...p, [k]: v }))}
+              onChange={onParamChange}
               disabled={submitting}
             />
             <div className="field">

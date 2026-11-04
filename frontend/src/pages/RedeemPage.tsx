@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { ApiError, redeem } from '../api';
+import { ApiError, fetchSkills, redeem } from '../api';
 import { errorText } from '../errors';
 import { loadTokens, mergeTokens, removeToken, type StoredToken } from '../tokens';
+import type { SkillManifest } from '../types';
 
 /** 兑换页：唯一公网入口，凭收货码领取令牌并暂存本地（frontend-design §1、§5） */
 export default function RedeemPage() {
@@ -13,6 +14,14 @@ export default function RedeemPage() {
   const [err, setErr] = useState<string | null>(incoming ?? null);
   const [busy, setBusy] = useState(false);
   const [tokens, setTokens] = useState<StoredToken[]>(loadTokens());
+  const [skills, setSkills] = useState<SkillManifest[]>([]);
+
+  /* 技能入口：兑换页直达各技能专属页（Q3） */
+  useEffect(() => {
+    fetchSkills()
+      .then(setSkills)
+      .catch(() => setSkills([]));
+  }, []);
 
   const submit = async (): Promise<void> => {
     const trimmed = code.trim().toUpperCase();
@@ -61,6 +70,26 @@ export default function RedeemPage() {
         <button type="button" className="primary" disabled={busy} onClick={() => void submit()}>
           {busy ? '兑换中…' : '兑换'}
         </button>
+      </section>
+
+      <section className="panel">
+        <h2>技能入口（{skills.length}）</h2>
+        {skills.length === 0 ? (
+          <p className="muted">技能清单加载中或暂不可用；仍可用下方通用工作台。</p>
+        ) : (
+          <ul className="token-list">
+            {skills.map((s) => (
+              <li key={s.id}>
+                <span className="token-code">
+                  {s.displayName}（{s.kind === 'img2img' ? '需源图' : '文生图'}）
+                </span>
+                <Link className="primary" to={`/skill/${s.id}`}>
+                  进入该技能页
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
 
       <section className="panel">

@@ -27,11 +27,12 @@ COPY --from=build /app/gateway/dist gateway/dist
 COPY --from=build /app/frontend/dist frontend/dist
 
 ENV STATIC_DIR=/app/frontend/dist \
-    GATEWAY_ADMIN_HOST=127.0.0.1
+    GATEWAY_ADMIN_HOST=0.0.0.0
 
-EXPOSE 8080
+# 8080 公网（HTTP/WS + 前端）；8081 admin（compose 仅发布 127.0.0.1，经 nginx /admin+Basic Auth）
+EXPOSE 8080 8081
 
-# 公网首页由 STATIC_DIR 托管，200 即前端可服务；admin 不发布宿主端口
+# 公网首页由 STATIC_DIR 托管，200 即前端可服务
 HEALTHCHECK --interval=15s --timeout=5s --start-period=10s --retries=5 \
   CMD node -e "fetch('http://127.0.0.1:'+(process.env.GATEWAY_PORT||8080)+'/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 

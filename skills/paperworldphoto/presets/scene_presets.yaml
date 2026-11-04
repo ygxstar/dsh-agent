@@ -1,0 +1,124 @@
+park:
+  name: 户外公园
+  scene_cues:
+  - 草坪
+  - 树木
+  - 步道
+  - 长椅
+  - 湖面/远景可选
+  paper_translation:
+  - 多层纸艺草坪
+  - 纹理纸树干
+  - 层叠剪纸树冠
+  - 少量纸花
+  - 柔软纸云
+  avoid:
+  - 过量花海
+  - 童话城堡
+  - 无关建筑
+  enhancement: 30
+urban_transit:
+  name: 城市公交/候车亭
+  scene_cues:
+  - 候车亭
+  - 长椅
+  - 路线板
+  - 道路
+  - 写字楼
+  - 行道树
+  paper_translation:
+  - 半透明描图纸玻璃感
+  - 层叠纸质金属框架
+  - 卡纸长椅
+  - 几何纸艺城市天际线
+  - 纸雕行道树
+  avoid:
+  - 花园化
+  - 梦幻蝴蝶
+  - 大面积花朵
+  enhancement: 15
+cafe:
+  name: 咖啡馆
+  scene_cues:
+  - 桌椅
+  - 咖啡杯
+  - 窗
+  - 书本/电脑
+  - 室内灯
+  paper_translation:
+  - 卡纸桌椅
+  - 折纸灯罩
+  - 纸艺咖啡杯
+  - 纸雕植物
+  - 纸质书本与陈列
+  avoid:
+  - 花朵挤满桌面
+  - 过度童话化
+  enhancement: 20
+seaside:
+  name: 海边度假
+  scene_cues:
+  - 海面
+  - 沙滩/悬崖
+  - 天空
+  - 远景建筑/帆船
+  paper_translation:
+  - 多层蓝白纸浪
+  - 撕边纸质泡沫
+  - 纸雕悬崖
+  - 层叠云朵
+  - 微型帆船
+  avoid:
+  - 水体变塑料
+  - 过量仙女元素
+  enhancement: 35
+home:
+  name: 居家/书房
+  scene_cues:
+  - 沙发/桌面
+  - 书架
+  - 台灯
+  - 电脑
+  - 植物
+  paper_translation:
+  - 卡纸家具
+  - 纸艺书本
+  - 折纸灯罩
+  - 层叠纸植物
+  - 纹理纸墙面
+  avoid:
+  - 室内花园化
+  - 不相关户外元素
+  enhancement: 15
+pet_nature:
+  name: 宠物户外
+  scene_cues:
+  - 宠物
+  - 草地
+  - 树
+  - 步道/远景
+  paper_translation:
+  - 纸艺草坪
+  - 层叠树木
+  - 少量花朵
+  - 微缩纸房/远景可选
+  avoid:
+  - 把宠物变成人
+  - 玩具塑料毛发
+  enhancement: 30
+festival_night:
+  name: 节日夜景
+  scene_cues:
+  - 灯光
+  - 夜空
+  - 摊位/建筑
+  - 装饰
+  paper_translation:
+  - 半透明纸灯笼
+  - 背光纸雕建筑
+  - 纸艺星星与装饰
+  - 深色纹理卡纸夜空
+  avoid:
+  - 霓虹塑料感
+  - 过曝
+  enhancement: 45

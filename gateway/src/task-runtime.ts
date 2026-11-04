@@ -162,6 +162,10 @@ export class TaskRuntime {
           (delta) => this.emitFn(task.taskId, { type: 'progress', cellId: cell.cellId, source: 'dsh', delta }),
         );
         await this.discoverOutputs(task, cell);
+        // agent 正常收尾但一张图都没产出 = 实际失败；不置错会让前端永远停在"生成中"
+        if (cell.outputs.length === 0) {
+          throw new GatewayError('DSH_FAILED', 'agent 执行结束但未产出图片', cell.cellId);
+        }
         cell.state = 'AWAITING_MODIFY_OR_CONFIRM';
       } catch (err) {
         const code: string =

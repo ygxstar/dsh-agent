@@ -36,6 +36,10 @@ _Avoid_: 插件、prompt
 网关为每个可用技能持有的薄元数据（标识、显示名、是否需要源图、参数 schema），仅用于前端表单渲染与格式校验，不含提示词语义。
 _Avoid_: 技能注册表、参数模板
 
+**效果（Effect）**:
+一个技能经其技能清单参数 schema 声明的可选出图变体；在该技能的独立页面上以选择器呈现。
+_Avoid_: 模板、滤镜、风格
+
 **插件（Plugin）**:
 安装进 DSH profile 的扩展包，为 DSH 增加运行时能力（如 dsh-webapi 提供 HTTP API）。
 _Avoid_: 技能、extension

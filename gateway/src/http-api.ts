@@ -264,12 +264,105 @@ export function createAdminServer(deps: HttpApiDeps): Server {
         const code = decodeURIComponent(path.slice('/admin/codes/'.length, -'/revoke'.length));
         return handleRevokeCode(deps, res, code);
       }
+      // 签发页（1104-Q8）：挂 admin 端口，经 nginx /admin + Basic Auth 暴露
+      if (req.method === 'GET' && (path === '/admin' || path === '/admin/')) return serveAdminPage(deps, res);
       sendJson(res, 404, { error: 'NOT_FOUND' });
     } catch (err) {
       if (!res.headersSent) sendError(res, err);
       else res.end();
     }
   });
+}
+
+/** 签发页：表单调 POST /admin/tokens，展示收货码与令牌列表（1104-Q8） */
+function serveAdminPage(deps: HttpApiDeps, res: ServerResponse): void {
+  const skillsJson = JSON.stringify(deps.manifest.list().map((s) => ({ id: s.id, displayName: s.displayName }))).replace(/</g, '\\u003c');
+  const html = `<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>令牌签发 · dsh-agent</title>
+<style>
+  body{font-family:system-ui,"PingFang SC","Microsoft YaHei",sans-serif;background:#111417;color:#e8eaed;margin:0;padding:2rem}
+  main{max-width:640px;margin:0 auto}
+  h1{font-size:1.25rem;font-weight:600}
+  form{background:#1a1f24;border:1px solid #2a3138;border-radius:10px;padding:1.25rem;display:grid;gap:.9rem}
+  label{display:grid;gap:.3rem;font-size:.85rem;color:#9aa4ad}
+  input[type=text],input[type=number]{background:#0d1114;border:1px solid #2a3138;border-radius:6px;color:#e8eaed;padding:.5rem .6rem;font-size:.95rem}
+  fieldset{border:1px solid #2a3138;border-radius:6px;padding:.6rem .8rem}
+  legend{font-size:.8rem;color:#9aa4ad;padding:0 .3rem}
+  .ck{display:inline-flex;align-items:center;gap:.35rem;margin:.25rem .8rem .25rem 0;font-size:.9rem;color:#e8eaed;cursor:pointer}
+  button{background:#2563eb;border:0;border-radius:6px;color:#fff;padding:.6rem 1.1rem;font-size:.95rem;cursor:pointer}
+  button:hover{background:#1d4ed8}
+  #out{margin-top:1.25rem;background:#1a1f24;border:1px solid #2a3138;border-radius:10px;padding:1.25rem;white-space:pre-wrap;word-break:break-all;font-family:inherit;display:none}
+  .code{font-size:1.6rem;font-weight:700;letter-spacing:.12em;color:#4ade80;margin:.4rem 0}
+  .err{color:#f87171}
+  table{border-collapse:collapse;width:100%;margin-top:.6rem;font-size:.85rem}
+  td,th{border-bottom:1px solid #2a3138;padding:.35rem .5rem;text-align:left}
+</style></head>
+<body><main>
+<h1>令牌签发</h1>
+<form id="issue">
+  <label>订单号（orderRef）<input type="text" id="orderRef" required placeholder="ORD-1104-01" maxlength="64"></label>
+  <label>令牌数量（tasks）<input type="number" id="count" min="1" max="50" value="1"></label>
+  <label>收货码有效期（小时）<input type="number" id="ttl" min="1" max="720" value="24"></label>
+  <fieldset><legend>技能预设（allowedSkillIds，默认全选）</legend><div id="skills"></div></fieldset>
+  <button type="submit">签发</button>
+</form>
+<div id="out"></div>
+</main>
+<script>
+var skills = ${skillsJson};
+var box = document.getElementById('skills');
+skills.forEach(function (s) {
+  var lab = document.createElement('label');
+  lab.className = 'ck';
+  var cb = document.createElement('input');
+  cb.type = 'checkbox'; cb.checked = true; cb.value = s.id;
+  lab.appendChild(cb);
+  lab.appendChild(document.createTextNode(' ' + s.displayName + '（' + s.id + '）'));
+  box.appendChild(lab);
+});
+document.getElementById('issue').addEventListener('submit', async function (e) {
+  e.preventDefault();
+  var out = document.getElementById('out');
+  out.style.display = 'block';
+  out.className = '';
+  out.textContent = '签发中…';
+  var ids = Array.prototype.map.call(box.querySelectorAll('input:checked'), function (c) { return c.value; });
+  if (!ids.length) { out.className = 'err'; out.textContent = '至少勾选一个技能'; return; }
+  var count = Math.min(50, Math.max(1, +document.getElementById('count').value || 1));
+  var ttl = Math.min(720, Math.max(1, +document.getElementById('ttl').value || 24));
+  var tasks = [];
+  for (var i = 0; i < count; i++) tasks.push({ allowedSkillIds: ids });
+  var body = {
+    orderRef: document.getElementById('orderRef').value.trim(),
+    tasks: tasks,
+    codeExpiresAt: Date.now() + ttl * 3600 * 1000
+  };
+  try {
+    var r = await fetch('/admin/tokens', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    var d = await r.json();
+    if (!r.ok) { out.className = 'err'; out.textContent = '失败：' + (d.error || r.status) + (d.message ? ' — ' + d.message : ''); return; }
+    var rows = d.tokens.map(function (t) {
+      return '<tr><td>' + t.token + '</td><td>' + t.taskId + '</td></tr>';
+    }).join('');
+    out.innerHTML =
+      '<div>收货码（Redeem Code）</div><div class="code">' + d.redeemCode + '</div>' +
+      '<div>有效期至：' + new Date(d.expiresAt).toLocaleString() + '（' + d.tokens.length + ' 枚令牌）</div>' +
+      '<table><thead><tr><th>token</th><th>taskId</th></tr></thead><tbody>' + rows + '</tbody></table>';
+  } catch (err) {
+    out.className = 'err';
+    out.textContent = '请求失败：' + err;
+  }
+});
+</script>
+</body></html>`;
+  res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+  res.end(html);
 }
 
 function buildPreset(raw: unknown, manifest: ManifestStore): Preset {

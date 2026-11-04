@@ -2,7 +2,7 @@
 // apimart-image：零依赖 MCP stdio 服务器，暴露 generate_image 工具（ADR-0003）。
 // 传输：换行分隔的 JSON-RPC 2.0（MCP stdio 约定）。
 // APIMart gpt-image-2 为异步任务：POST /images/generations 取 task_id → GET /tasks/{id} 轮询。
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
 
@@ -31,18 +31,29 @@ const GENERATE_TOOL = {
   name: 'generate_image',
   description:
     '调用 APIMart gpt-image-2 生成或改写图像，返回图像本身。' +
-    '提供 image_urls 时为图生图（可拿已生成的结果图继续修改），否则为文生图。' +
+    '提供 image_paths（首选，工作区文件路径）或 image_urls 时为图生图' +
+    '（可拿已生成的结果图继续修改），否则为文生图。' +
     '常与 mono-color-skill 配合：先用技能产出单色海报的英文 prompt，再调用本工具。',
   inputSchema: {
     type: 'object',
     properties: {
       prompt: { type: 'string', description: '图像描述（支持中英文，越具体越好）' },
+      image_paths: {
+        type: 'array',
+        maxItems: 15,
+        items: { type: 'string' },
+        description:
+          '参考图路径（首选，最多 15 张）：会话工作区内文件用相对路径（如 src-xxx.jpg），' +
+          '或用 pwd 拿到的绝对路径。服务端自行读文件转 base64——' +
+          '绝不要把图片 base64 内容粘进任何参数，LLM 抄写必损坏导致 APIMart 400。',
+      },
       image_urls: {
         type: 'array',
         maxItems: 15,
         items: { type: 'string' },
         description:
-          '参考图，最多 15 张：公开 URL，或 base64 data URI（data:image/png;base64,...）。' +
+          '参考图，最多 15 张：公开 URL，或 data URI。' +
+          '除非图片来自网络，否则请改用 image_paths（不要手工粘贴 base64）。' +
           '传入即进入图生图模式；不传则按 size 比例输出。',
       },
       size: {
@@ -113,6 +124,34 @@ function sniffMime(bytes) {
   return 'image/png';
 }
 
+/** 参考图路径解析：绝对路径直用；相对路径先试当前工作区，再试各 staging 会话工作区（stdio 子进程 cwd 未必等于会话 cwd） */
+function resolveImagePath(p) {
+  const tried = [];
+  const candidates = path.isAbsolute(p)
+    ? [p]
+    : [path.resolve(process.cwd(), p)];
+  if (!path.isAbsolute(p)) {
+    try {
+      for (const dir of readdirSync('/root/.dsh/staging')) candidates.push(path.join('/root/.dsh/staging', dir, p));
+    } catch {
+      /* staging 目录不存在则忽略 */
+    }
+  }
+  let hit = null;
+  for (const c of candidates) {
+    tried.push(c);
+    try {
+      const st = statSync(c);
+      if (!st.isFile()) continue;
+      if (!hit || st.mtimeMs > hit.mtimeMs) hit = { path: c, mtimeMs: st.mtimeMs };
+    } catch {
+      /* 不存在，试下一个 */
+    }
+  }
+  if (!hit) throw new Error(`参考图文件不存在: ${p}（已尝试 ${tried.join(' , ')}）`);
+  return hit.path;
+}
+
 async function fetchImage(url) {
   if (url.startsWith('data:')) {
     const [header, payload] = url.split(',', 2);
@@ -134,13 +173,25 @@ async function generateImage(args) {
   if (args.size) payload.size = args.size;
   if (args.resolution) payload.resolution = args.resolution;
   if (args.nsfw_check === true) payload.nsfw_check = true;
+  const refs = [];
+  if (args.image_paths !== undefined) {
+    if (!Array.isArray(args.image_paths) || args.image_paths.length === 0) {
+      throw new Error('image_paths 必须是非空数组');
+    }
+    for (const p of args.image_paths) {
+      const abs = resolveImagePath(String(p));
+      const buf = readFileSync(abs);
+      refs.push(`data:${sniffMime(buf)};base64,${buf.toString('base64')}`);
+    }
+  }
   if (args.image_urls !== undefined) {
     if (!Array.isArray(args.image_urls) || args.image_urls.length === 0) {
       throw new Error('image_urls 必须是非空数组');
     }
-    if (args.image_urls.length > 15) throw new Error('image_urls exceeds max 15');
-    payload.image_urls = args.image_urls;
+    refs.push(...args.image_urls);
   }
+  if (refs.length > 15) throw new Error('image_urls exceeds max 15');
+  if (refs.length > 0) payload.image_urls = refs;
 
   const submitted = await apimartFetch('/images/generations', {
     method: 'POST',

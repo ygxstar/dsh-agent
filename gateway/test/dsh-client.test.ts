@@ -21,10 +21,17 @@ afterEach(async () => {
 });
 
 describe('HttpDshClient ↔ stub', () => {
-  it('鉴权与元数据端点：skills 三技能、systemStatus ok、会话可创建', async () => {
+  it('鉴权与元数据端点：skills 六技能、systemStatus ok、会话可创建', async () => {
     const client = new HttpDshClient(stub.baseUrl, 'stub-secret');
     const skills = await client.getSkills();
-    expect(skills.map((s) => s.id)).toEqual(['mono-color', 'duo-poster', 'text-poster']);
+    expect(skills.map((s) => s.id)).toEqual([
+      'mono-color',
+      'paperworldphoto',
+      'photo-story',
+      'real-qgraffiti-illusion',
+      'second-world-poster',
+      'western-animation-concept-portrait',
+    ]);
     const status = await client.systemStatus();
     expect(status.status).toBe('ok');
     expect(await client.createSession()).toMatch(/^sess_/);
@@ -109,7 +116,7 @@ describe('网关 × 真 stub：全流程（产出差量 + 源图分发）', () =
       expect(up1.data.imageRef).not.toBe(up2.data.imageRef);
 
       const c = await authedWs(gw.wsUrl, token);
-      c.send({ type: 'command', skillIds: ['mono-color', 'text-poster'], imageRefs: [String(up1.data.imageRef)], params: { title: '向北步行' } });
+      c.send({ type: 'command', skillIds: ['mono-color', 'photo-story'], imageRefs: [String(up1.data.imageRef)], params: { title: '向北步行' } });
       const settled = await waitSettled(c);
 
       // 2 格各有产出；每格 outputs 不含任何 img_* 源图引用

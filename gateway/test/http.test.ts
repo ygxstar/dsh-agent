@@ -39,7 +39,14 @@ describe('管理 API：签发 / 列表 / 吊销', () => {
     const auth = await json(`${gw.publicUrl}/auth`, 'POST', { token: tokens[0].token });
     expect(auth.status).toBe(200);
     expect(auth.data).toMatchObject({ taskId: tokens[0].taskId, state: 'CREATED' });
-    expect((auth.data.preset as { allowedSkillIds: string[] }).allowedSkillIds).toEqual(['mono-color', 'duo-poster', 'text-poster']);
+    expect((auth.data.preset as { allowedSkillIds: string[] }).allowedSkillIds).toEqual([
+      'mono-color',
+      'paperworldphoto',
+      'photo-story',
+      'real-qgraffiti-illusion',
+      'second-world-poster',
+      'western-animation-concept-portrait',
+    ]);
   });
 
   it('codeExpiresAt 是过去时间 → BAD_PARAMS 400', async () => {
@@ -138,10 +145,18 @@ describe('兑换 /auth', () => {
 });
 
 describe('GET /skills', () => {
-  it('返回网关侧三技能清单', async () => {
-    const res = await json<Array<{ id: string }>>(`${gw.publicUrl}/skills`, 'GET');
+  it('返回网关侧六技能清单（全部 img2img、需源图）', async () => {
+    const res = await json<Array<{ id: string; kind: string; requiresSourceImage: boolean }>>(`${gw.publicUrl}/skills`, 'GET');
     expect(res.status).toBe(200);
-    expect(res.data.map((s) => s.id)).toEqual(['mono-color', 'duo-poster', 'text-poster']);
+    expect(res.data.map((s) => s.id)).toEqual([
+      'mono-color',
+      'paperworldphoto',
+      'photo-story',
+      'real-qgraffiti-illusion',
+      'second-world-poster',
+      'western-animation-concept-portrait',
+    ]);
+    expect(res.data.every((s) => s.kind === 'img2img' && s.requiresSourceImage)).toBe(true);
   });
 });
 

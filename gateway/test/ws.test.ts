@@ -57,7 +57,14 @@ describe('WS 鉴权与快照', () => {
   it('auth 成功回 auth_ok（taskId/state/preset/cells）；错误令牌回 TOKEN_INVALID；重复 auth 回 STATE_INVALID', async () => {
     const { token, c } = await setup();
     expect(c.received[0]).toMatchObject({ type: 'auth_ok', state: 'CREATED', cells: [] });
-    expect((c.received[0] as { preset: Preset }).preset.allowedSkillIds).toEqual(['mono-color', 'duo-poster', 'text-poster']);
+    expect((c.received[0] as { preset: Preset }).preset.allowedSkillIds).toEqual([
+      'mono-color',
+      'paperworldphoto',
+      'photo-story',
+      'real-qgraffiti-illusion',
+      'second-world-poster',
+      'western-animation-concept-portrait',
+    ]);
 
     // 同一连接重复登录
     c.send({ type: 'auth', token });
@@ -78,7 +85,7 @@ describe('WS 鉴权与快照', () => {
 describe('首条指令：笛卡尔积展开', () => {
   it('2 技能 × 2 源图 → 4 个格，逐格流式进度与产出，落定 AWAITING', async () => {
     const { c, refs } = await setup([{}], 2);
-    c.send({ type: 'command', skillIds: ['mono-color', 'text-poster'], imageRefs: refs, params: { title: '向北步行' }, text: '街景转单色海报' });
+    c.send({ type: 'command', skillIds: ['mono-color', 'photo-story'], imageRefs: refs, params: { title: '向北步行' }, text: '街景转单色海报' });
 
     const settled = (await waitSettled(c)) as { cells: CellSnapshot[] };
     expect(settled.cells).toHaveLength(4);
@@ -88,7 +95,7 @@ describe('首条指令：笛卡尔积展开', () => {
 
     // 笛卡尔积：每个技能各出现 2 次（每张源图一次）
     expect(settled.cells.filter((s) => s.skill === 'mono-color')).toHaveLength(2);
-    expect(settled.cells.filter((s) => s.skill === 'text-poster')).toHaveLength(2);
+    expect(settled.cells.filter((s) => s.skill === 'photo-story')).toHaveLength(2);
 
     // fake 侧收到 4 条 prompt，且源图分发：两张图各被用两次
     expect(dsh.prompts).toHaveLength(4);
@@ -117,20 +124,14 @@ describe('首条指令：笛卡尔积展开', () => {
     c.close();
   });
 
-  it('纯文生图：text-poster 不带 imageRefs 可出图；缺源图的 mono-color 首条 → IMAGE_REF_INVALID', async () => {
-    // 任务 A：纯文生图可跑
-    const a = await setup();
-    a.c.send({ type: 'command', skillIds: ['text-poster'], params: { title: '夜航' } });
-    await waitSettled(a.c);
-    expect(a.c.received.filter((m) => m.type === 'result')).toHaveLength(1);
-    a.c.close();
-
-    // 任务 B（新令牌，尚未展开）：需要源图的技能缺 imageRefs → IMAGE_REF_INVALID
-    const b = await setup();
-    b.c.send({ type: 'command', skillIds: ['mono-color'], params: { title: 'x' } });
-    const err = await b.c.waitFor((m) => m.type === 'error' && m.code === 'IMAGE_REF_INVALID');
-    expect(err.retryable).toBe(false);
-    b.c.close();
+  it('缺源图的首条 → IMAGE_REF_INVALID（清单技能全部需要源图）', async () => {
+    for (const skill of ['mono-color', 'photo-story']) {
+      const s = await setup();
+      s.c.send({ type: 'command', skillIds: [skill], params: { title: 'x' } });
+      const err = await s.c.waitFor((m) => m.type === 'error' && m.code === 'IMAGE_REF_INVALID');
+      expect(err.retryable).toBe(false);
+      s.c.close();
+    }
   });
 });
 
@@ -140,7 +141,7 @@ describe('首条指令校验', () => {
     c.send({ type: 'command', text: 'hi' });
     await c.waitFor((m) => m.type === 'error' && m.code === 'BAD_PARAMS');
 
-    c.send({ type: 'command', skillIds: ['text-poster'], cellId: 'cell_01', params: { title: 'x' } });
+    c.send({ type: 'command', skillIds: ['photo-story'], cellId: 'cell_01', params: { title: 'x' } });
     await c.waitFor((m) => m.type === 'error' && m.code === 'BAD_PARAMS' && m.message?.includes('cellId'));
 
     c.send({ type: 'command', skillIds: ['no-such-skill'], params: { title: 'x' } });
@@ -150,7 +151,7 @@ describe('首条指令校验', () => {
 
   it('格数超 preset.maxCells → LIMIT', async () => {
     const { c, refs } = await setup([{ maxCells: 2 }], 2); // 2 图 × 2 技能 = 4 > 2
-    c.send({ type: 'command', skillIds: ['mono-color', 'text-poster'], imageRefs: refs, params: { title: 'x' } });
+    c.send({ type: 'command', skillIds: ['mono-color', 'photo-story'], imageRefs: refs, params: { title: 'x' } });
     const err = await c.waitFor((m) => m.type === 'error' && m.code === 'LIMIT');
     expect(err).toMatchObject({ code: 'LIMIT' });
     c.close();
@@ -158,14 +159,14 @@ describe('首条指令校验', () => {
 
   it('params 不符 Manifest schema → BAD_PARAMS（缺必填 title）', async () => {
     const { c } = await setup();
-    c.send({ type: 'command', skillIds: ['text-poster'], params: {} });
+    c.send({ type: 'command', skillIds: ['photo-story'], params: {} });
     await c.waitFor((m) => m.type === 'error' && m.code === 'BAD_PARAMS' && m.message?.includes('title'));
     c.close();
   });
 
   it('超大消息（>maxPayloadBytes）→ PAYLOAD_TOO_LARGE', async () => {
     const { c } = await setup();
-    c.send({ type: 'command', skillIds: ['text-poster'], params: { title: 'x' }, text: 'a'.repeat(300 * 1024) });
+    c.send({ type: 'command', skillIds: ['photo-story'], params: { title: 'x' }, text: 'a'.repeat(300 * 1024) });
     await c.waitFor((m) => m.type === 'error' && m.code === 'PAYLOAD_TOO_LARGE');
     c.close();
   });
@@ -192,7 +193,7 @@ describe('修改与重试', () => {
 
   it('修改带 skillIds → SKILL_LOCKED；带 imageRefs → IMAGE_REF_INVALID', async () => {
     const { c } = await settledFirst();
-    c.send({ type: 'command', cellId: 'cell_01', skillIds: ['duo-poster'], params: { title: 'x' } });
+    c.send({ type: 'command', cellId: 'cell_01', skillIds: ['paperworldphoto'], params: { title: 'x' } });
     await c.waitFor((m) => m.type === 'error' && m.code === 'SKILL_LOCKED');
 
     c.send({ type: 'command', cellId: 'cell_01', imageRefs: ['img_whatever'], params: { title: 'x' } });
@@ -241,29 +242,54 @@ describe('修改与重试', () => {
 
 describe('失败隔离与重试', () => {
   it('一个技能失败不影响其他格；失败格可同任务重试', async () => {
-    dsh.failSkills.add('duo-poster');
+    dsh.failSkills.add('paperworldphoto');
     const { c, refs } = await setup([{}], 1);
-    c.send({ type: 'command', skillIds: ['mono-color', 'duo-poster'], imageRefs: refs, params: { title: '向北步行' } });
+    c.send({ type: 'command', skillIds: ['mono-color', 'paperworldphoto'], imageRefs: refs, params: { title: '向北步行' } });
 
     const settled = (await waitSettled(c)) as { cells: CellSnapshot[] };
     const mono = settled.cells.find((s) => s.skill === 'mono-color')!;
-    const duo = settled.cells.find((s) => s.skill === 'duo-poster')!;
+    const pw = settled.cells.find((s) => s.skill === 'paperworldphoto')!;
     expect(mono.state).toBe('AWAITING_MODIFY_OR_CONFIRM');
-    expect(duo.state).toBe('FAILED');
-    expect(duo.error).toMatchObject({ code: 'DSH_FAILED', retryable: true });
+    expect(pw.state).toBe('FAILED');
+    expect(pw.error).toMatchObject({ code: 'DSH_FAILED', retryable: true });
 
-    const errEvt = await c.waitFor((m) => m.type === 'error' && m.cellId === duo.cellId);
+    const errEvt = await c.waitFor((m) => m.type === 'error' && m.cellId === pw.cellId);
     expect(errEvt).toMatchObject({ code: 'DSH_FAILED', retryable: true });
 
     // 重试：失败格可改（状态机允许 FAILED），修复 fake 后成功
-    dsh.failSkills.delete('duo-poster');
+    dsh.failSkills.delete('paperworldphoto');
     const mark = c.received.length;
-    c.send({ type: 'command', cellId: duo.cellId, params: { title: '向北步行' } });
+    c.send({ type: 'command', cellId: pw.cellId, params: { title: '向北步行' } });
     const retried = (await waitSettled(c, 8000, mark)) as { cells: CellSnapshot[] };
-    const duo2 = retried.cells.find((s) => s.skill === 'duo-poster')!;
-    expect(duo2.state).toBe('AWAITING_MODIFY_OR_CONFIRM');
-    expect(duo2.outputs.length).toBeGreaterThanOrEqual(1);
-    expect(duo2.error).toBeUndefined();
+    const pw2 = retried.cells.find((s) => s.skill === 'paperworldphoto')!;
+    expect(pw2.state).toBe('AWAITING_MODIFY_OR_CONFIRM');
+    expect(pw2.outputs.length).toBeGreaterThanOrEqual(1);
+    expect(pw2.error).toBeUndefined();
+    c.close();
+  });
+
+  it('agent 正常收尾但零产出 → 格 FAILED 可重试（前端不再永久"生成中"）', async () => {
+    dsh.silentOutputs = true;
+    const { c, refs } = await setup([{}], 1);
+    c.send({ type: 'command', skillIds: ['mono-color'], imageRefs: refs, params: { title: 'a' } });
+
+    const settled = (await waitSettled(c)) as { cells: CellSnapshot[] };
+    const cell = settled.cells[0];
+    expect(cell.state).toBe('FAILED');
+    expect(cell.outputs).toHaveLength(0);
+    expect(cell.error).toMatchObject({ code: 'DSH_FAILED', retryable: true });
+    const errEvt = await c.waitFor((m) => m.type === 'error' && m.cellId === cell.cellId);
+    expect(errEvt).toMatchObject({ code: 'DSH_FAILED', retryable: true });
+
+    // 重试后恢复出图
+    dsh.silentOutputs = false;
+    const mark = c.received.length;
+    c.send({ type: 'command', cellId: cell.cellId, params: { title: 'b' } });
+    const retried = (await waitSettled(c, 8000, mark)) as { cells: CellSnapshot[] };
+    const cell2 = retried.cells.find((s) => s.cellId === cell.cellId)!;
+    expect(cell2.state).toBe('AWAITING_MODIFY_OR_CONFIRM');
+    expect(cell2.outputs.length).toBeGreaterThanOrEqual(1);
+    expect(cell2.error).toBeUndefined();
     c.close();
   });
 
@@ -312,11 +338,11 @@ describe('确认完成', () => {
   });
 
   it('未产出前确认 → STATE_INVALID；satisfaction 越界 → BAD_PARAMS', async () => {
-    const { c } = await setup();
+    const { c, refs } = await setup([{}], 1);
     c.send({ type: 'confirm', satisfaction: 5 });
     await c.waitFor((m) => m.type === 'error' && m.code === 'STATE_INVALID');
 
-    c.send({ type: 'command', skillIds: ['text-poster'], params: { title: 'x' } });
+    c.send({ type: 'command', skillIds: ['mono-color'], imageRefs: refs, params: { title: 'x' } });
     await waitSettled(c);
     c.send({ type: 'confirm', satisfaction: 9 });
     await c.waitFor((m) => m.type === 'error' && m.code === 'BAD_PARAMS');

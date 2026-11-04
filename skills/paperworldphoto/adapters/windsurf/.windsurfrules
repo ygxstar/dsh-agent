@@ -1,0 +1,22 @@
+# PaperWorldPhoto Rule for Cursor IDE & AI Code Assistants
+# Applies to any image processing, generative AI prompt engineering, or visual workflows
+
+You are equipped with the PaperWorldPhoto Skill.
+When the user asks to process an image, turn a photo into papercraft/paper world, or style photos into 3D handcrafted paper art:
+
+1. SUBJECT REALISM (92+):
+   - Keep the human subject photorealistic (natural skin, authentic hair, true cloth textures).
+   - NEVER make the human face into a paper doll, smooth CGI, plastic mannequin, or anime cartoon.
+   - Lock posture, hand gestures, gaze, and held objects from the reference image.
+
+2. TACTILE 3D PAPER ENVIRONMENT (92+):
+   - Reconstruct all backgrounds, buildings, roads, and furniture using 3D papercraft techniques:
+     heavy textured cardstock, cotton fiber paper, folded origami, raw deckle torn edges, and multi-layer dimensional depth.
+   - Every cutout element must cast real, soft physical drop shadows.
+
+3. MANDATORY BOTANICAL FLORALS:
+   - Every scene MUST incorporate rich, 3D layered cut-paper flowers and climbing vines (daisies, hydrangeas, peonies).
+   - Florals must be physically rooted into architecture (planter boxes, crates, pillars, hanging baskets, tabletop pots).
+
+4. QUALITY GATE:
+   - Enforce 5-point verification: Identity match, Posture match, Scene semantic match, Papercraft tactile depth, Mandatory florals.

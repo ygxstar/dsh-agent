@@ -30,6 +30,9 @@ RUN mkdir -p /root/.dsh/skills \
  && mv /tmp/mono-color-skill-main /root/.dsh/skills/mono-color-skill \
  && test -f /root/.dsh/profiles/web/package.json
 
+# 3b) 仓库 skills/ 下的可复用技能（1104：5 个新技能随镜像分发）
+COPY skills /root/.dsh/skills
+
 # 4) APIMart 图像 MCP 服务（零依赖 stdio server）
 COPY mcp-image /opt/mcp-image
 

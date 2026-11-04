@@ -1,0 +1,34 @@
+version: '0.1'
+type: custom_tool
+identity:
+  name: paperworldphoto
+  author: zjml0522-spec
+  label:
+    en_US: PaperWorldPhoto
+    zh_Hans: 照片转3D手工纸艺微缩世界
+description:
+  en_US: Compile photo semantics into 3D handcrafted paper art diorama prompts with photorealistic subjects and mandatory florals.
+  zh_Hans: 将用户照片解析并编译为高密度 3D 手工纸艺微缩世界提示词，保持人物真实感与强制花植规范。
+parameters:
+  - name: subject_description
+    type: string
+    required: true
+    label:
+      en_US: Subject Description
+      zh_Hans: 主体人物/动作/服饰描述
+  - name: scene_type
+    type: select
+    required: false
+    default: cafe
+    options:
+      - cafe
+      - park
+      - urban_transit
+      - seaside
+      - home
+      - pet_nature
+      - festival_night
+  - name: mandatory_florals
+    type: boolean
+    required: false
+    default: true

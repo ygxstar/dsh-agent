@@ -1,0 +1,207 @@
+historic_red_brick_urban:
+  name: 历史红砖城市建筑
+  visual_cues:
+  - 红砖立面
+  - 石材基座
+  - 凸窗/弧形窗
+  - 阳台
+  - 细部线脚
+  - 成熟行道树
+  paper_translation:
+  - 暖红/赭色纹理卡纸砖墙
+  - 灰米色厚卡纸石材基座
+  - 分层窗框
+  - 压纹阳台栏杆
+  - 纸雕树冠
+  material_priority:
+  - textured cardstock
+  - embossed paper
+  - layered cut paper
+  avoid:
+  - 地中海白墙化
+  - 童话城堡化
+  - 统一欧式模板
+european_classical_street:
+  name: 欧洲古典街区
+  visual_cues:
+  - 石材或灰泥立面
+  - 拱窗
+  - 坡屋顶
+  - 百叶窗
+  - 阳台
+  - 窄街
+  paper_translation:
+  - 米色厚卡纸墙体
+  - 分层檐口
+  - 纸艺百叶
+  - 红瓦/灰瓦叠片屋顶
+  - 纸质街灯
+  material_priority:
+  - heavy cardstock
+  - layered paper tiles
+  - cut paper
+  avoid:
+  - 现代玻璃幕墙
+  - 过量鲜花遮挡建筑
+mediterranean_coastal:
+  name: 地中海海岸建筑
+  visual_cues:
+  - 白墙
+  - 红瓦
+  - 蓝色门窗
+  - 沿海坡地
+  - 露台
+  paper_translation:
+  - 白色棉纹纸墙体
+  - 红陶色叠片屋瓦
+  - 蓝色卡纸门窗
+  - 层叠纸艺海岸
+  material_priority:
+  - cotton paper
+  - textured cardstock
+  - torn-edge paper
+  avoid:
+  - 红砖工业感
+  - 深色都市玻璃感
+modern_glass_tower:
+  name: 现代玻璃幕墙都市
+  visual_cues:
+  - 高层塔楼
+  - 玻璃幕墙
+  - 金属框架
+  - 规则网格
+  - 开放广场
+  paper_translation:
+  - 半透明描图纸/硫酸纸模拟玻璃
+  - 灰蓝卡纸框架
+  - 几何层叠立面
+  - 极简纸艺树木
+  material_priority:
+  - vellum
+  - smooth cardstock
+  - precision cut paper
+  avoid:
+  - 过度花园化
+  - 复古木质招牌
+  - 童话屋顶
+modernist_concrete:
+  name: 现代主义混凝土建筑
+  visual_cues:
+  - 清水混凝土
+  - 水平线条
+  - 大开窗
+  - 简洁体块
+  - 平屋顶
+  paper_translation:
+  - 灰米色纤维卡纸体块
+  - 精确切割开窗
+  - 低饱和纸层
+  - 硬朗阴影
+  material_priority:
+  - fibrous cardstock
+  - matte board
+  - precision cut paper
+  avoid:
+  - 华丽装饰
+  - 碎花堆叠
+industrial_warehouse:
+  name: 工业仓库 / 工业遗产
+  visual_cues:
+  - 大跨度砖墙
+  - 钢窗
+  - 锯齿屋顶
+  - 管线
+  - 粗粝表面
+  paper_translation:
+  - 深红褐纹理纸砖墙
+  - 深灰卡纸钢窗
+  - 瓦楞纸屋面
+  - 折纸管线
+  material_priority:
+  - corrugated paper
+  - rough cardstock
+  - kraft paper
+  avoid:
+  - 精致宫廷化
+  - 柔美花园化
+east_asian_traditional:
+  name: 东亚传统木构
+  visual_cues:
+  - 木柱
+  - 坡屋顶
+  - 飞檐
+  - 瓦片
+  - 院落
+  - 格栅窗
+  paper_translation:
+  - 棕色纤维纸木构
+  - 多层黑灰纸瓦
+  - 细切纸格栅
+  - 层叠院墙
+  material_priority:
+  - fibrous kraft paper
+  - layered cardstock
+  - fine cut paper
+  avoid:
+  - 西式拱窗
+  - 玻璃幕墙
+shikumen_lane:
+  name: 石库门 / 上海里弄
+  visual_cues:
+  - 砖石门框
+  - 红砖或青砖
+  - 窄弄堂
+  - 连续住宅立面
+  - 生活化街巷
+  paper_translation:
+  - 红褐/青灰纹理纸砖墙
+  - 厚卡纸门框
+  - 层叠弄堂透视
+  - 少量生活化纸艺道具
+  material_priority:
+  - textured cardstock
+  - kraft paper
+  - layered cut paper
+  avoid:
+  - 海滨旅游化
+  - 豪华欧式宫殿
+tropical_colonial:
+  name: 热带殖民地 / 南洋建筑
+  visual_cues:
+  - 骑楼
+  - 百叶窗
+  - 浅色墙面
+  - 深檐
+  - 棕榈/热带植物
+  paper_translation:
+  - 浅色纹理卡纸墙体
+  - 分层骑楼拱廊
+  - 纸艺百叶
+  - 大叶热带纸雕植物
+  material_priority:
+  - textured cardstock
+  - crepe paper foliage
+  - layered cut paper
+  avoid:
+  - 寒冷都市感
+  - 欧陆红瓦模板
+contemporary_residential:
+  name: 当代住宅 / 社区建筑
+  visual_cues:
+  - 住宅阳台
+  - 玻璃栏板
+  - 石材/涂料立面
+  - 社区绿化
+  - 人行尺度
+  paper_translation:
+  - 浅灰/米色卡纸立面
+  - 半透明纸栏板
+  - 层叠阳台
+  - 精简纸艺绿化
+  material_priority:
+  - smooth cardstock
+  - vellum
+  - layered paper
+  avoid:
+  - 旅游景点化
+  - 过度历史化
