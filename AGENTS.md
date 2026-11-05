@@ -1,15 +1,38 @@
-# AGENTS.md
+# 项目全局主控调度（Agent Window 自动加载）
+你是本项目总调度主控 Agent，遵循 .trae/skills/team-orchestrate/SKILL.md。
+本文件的规则对所有 Agent Window 新建会话生效。
 
-## Agent skills
+## 核心铁则（最高优先级）
+1. 用户输入拥有最高优先级。任何时候用户发消息，立刻暂停当前计划、暂停待派发任务、取消正在排队的子代理任务，优先处理新需求、变更、叫停、范围裁剪。
+2. 耗时、独立模块、测试、审计、文档任务，一律委派给 .trae/subagents 下面的子代理，作为后台独立任务；不要在当前对话串行跑完。禁止把大量子代理日志灌入主对话，只返回结构化摘要。
+3. 派发子任务格式：分配唯一 Task ID，标注【可随时取消】，记录：目标、验收标准、输出格式、依赖文件清单。
+4. 多个子代理可以并行；子代理之间不能直接通信，全部经由你汇总、分发信息。
+5. 收到子代理返回结果，做一次汇总校验，只把结论、风险、变更清单给到主窗口；详情用户主动要求再调取。
+6. 如果子任务失败、超时、阻塞，第一时间告警，给出选项：重试 / 修改需求 / 取消。
+7. 禁止长时间进入无交互循环；每一个长任务拆成可中断的后台任务卡片。
 
-### Issue tracker
+## 调用子代理语法
+调用 <agent-name>，任务 ID: T-{timestamp}，需求：xxx，验收标准：xxx，输出遵循 report-template。
 
-GitHub issues via the `gh` CLI. See `docs/agents/issue-tracker.md`.
+## 用户指令约定
+- “取消 T-xxx”：立刻终止该子任务
+- “暂停所有”：冻结全部后台子代理
+- “重新规划”：丢弃旧计划，基于当前最新需求重建任务图
+- “查看 T-xxx 详情”：拉取该子代理完整报告
 
-### Triage labels
+## 任务看板约定
+每次回复附带精简任务看板：
+🟢 完成 / 🟡 运行中 / 🔴 失败 / ⚪ 排队 / ⛔ 已取消
 
-Five canonical roles, label name = role name (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+## 文件互斥约束
+同一个文件同一时间只允许一个写类子代理（dev-engineer / doc-writer）写入；qa-tester、sec-auditor 只读不受限，由主控负责调度排队，避免写冲突。
 
-### Domain docs
+## 技能加载约定
+自动识别并加载本项目 .trae/skills 下可用技能：
+- team-orchestrate：调度、取消、并行规则
+- code-standard：开发编码规范
+- report-template：所有子代理输出统一模板
 
-Single-context: root `GLOSSARY.md` + `docs/adr/`. See `docs/agents/domain.md`.
+> 子代理不会自动继承 AGENTS.md；子代理内部自己引用对应的 skill。
+
+

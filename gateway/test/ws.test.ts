@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Gateway } from '../src/app.js';
-import type { CellSnapshot, Preset } from '../src/types.js';
+import type { CellSnapshot, Preset, StateMsg } from '../src/types.js';
 import { FakeDsh } from './fake-dsh.js';
-import { authedWs, json, startGateway, uploadImage, type WsClient } from './helpers.js';
+import { authedWs, json, startGateway, until, uploadImage, type WsClient } from './helpers.js';
 
 const future = (): number => Date.now() + 60 * 60 * 1000;
 
@@ -43,6 +43,10 @@ function waitSettled(c: WsClient, timeout = 8000, fromIndex = 0): Promise<unknow
 }
 
 const settle = (ms = 30): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+/** 直读 runtime 私有补捞定时器表（补捞清理断言用） */
+const salvageTimersOf = (runtime: Gateway['runtime']): Map<string, unknown> =>
+  (runtime as unknown as { salvageTimers: Map<string, unknown> }).salvageTimers;
 
 beforeEach(async () => {
   dsh = new FakeDsh();
@@ -304,6 +308,129 @@ describe('失败隔离与重试', () => {
     release();
     await waitSettled(c);
     c.close();
+  });
+
+  it('流报错但 agent 已落图 → 补捞产出直接落定可确认，不发格级 error', async () => {
+    dsh.failAfterOutputSkills.add('mono-color');
+    const { c, refs } = await setup([{}], 1);
+    c.send({ type: 'command', skillIds: ['mono-color'], imageRefs: refs, params: { title: 'a' } });
+
+    const settled = (await waitSettled(c)) as { cells: CellSnapshot[] };
+    const cell = settled.cells[0];
+    expect(cell.state).toBe('AWAITING_MODIFY_OR_CONFIRM');
+    expect(cell.outputs.length).toBeGreaterThanOrEqual(1);
+    expect(cell.error).toBeUndefined();
+    expect(c.received.some((m) => m.type === 'error')).toBe(false);
+    c.close();
+  });
+
+  it('失败后才落的图：WS 存活期间周期补捞，登记产出并翻回可确认态', async () => {
+    dsh.failSkills.add('mono-color');
+    const { c, refs } = await setup([{}], 1);
+    c.send({ type: 'command', skillIds: ['mono-color'], imageRefs: refs, params: { title: 'a' } });
+
+    const settled = (await waitSettled(c)) as { cells: CellSnapshot[] };
+    expect(settled.cells[0].state).toBe('FAILED');
+    const errEvt = await c.waitFor((m) => m.type === 'error' && m.cellId === settled.cells[0].cellId);
+    expect(errEvt).toMatchObject({ code: 'DSH_FAILED', retryable: true });
+
+    // agent 迟到产出：往格会话塞一张图（模拟 DSH 侧稍后落盘）
+    const sid = dsh.prompts[0].sessionId;
+    const mark = c.received.length;
+    dsh.sessions.get(sid)!.set('late-01.png', Buffer.from('late-png'));
+
+    const state = (await c.waitFor(
+      (m) => m.type === 'state' && m.cells[0]?.state === 'AWAITING_MODIFY_OR_CONFIRM',
+      8000,
+      mark,
+    )) as { cells: CellSnapshot[] };
+    const cell = state.cells[0];
+    expect(cell.outputs).toHaveLength(1);
+    expect(cell.error).toBeUndefined();
+    const result = c.received.slice(mark).find((m) => m.type === 'result');
+    expect(result).toMatchObject({ cellId: cell.cellId, url: expect.stringMatching(/^\/files\/out_/) });
+    c.close();
+  });
+
+  it('补捞达到上限后放弃：salvage 停止轮询，不再调用 listFiles、不翻状态', async () => {
+    await gw.close();
+    dsh = new FakeDsh();
+    gw = await startGateway({ salvageIntervalMs: 1 }, dsh); // 100 tick × 1ms，秒级收敛（上限仍为生产常量 100）
+    dsh.failSkills.add('mono-color');
+    const { c, refs } = await setup([{}], 1);
+    c.send({ type: 'command', skillIds: ['mono-color'], imageRefs: refs, params: { title: 'a' } });
+    const settled = (await waitSettled(c)) as { cells: CellSnapshot[] };
+    expect(settled.cells[0].state).toBe('FAILED');
+
+    // listFiles 只来自差量发现：失败时即时补捞 1 次 + 补捞循环上限 100 次 = 101 次，之后放弃
+    await until(() => dsh.listFilesCalls >= 101, 8000, 5);
+    await settle(120); // 远超 1ms 补捞周期：若未放弃，计数会继续增长
+    expect(dsh.listFilesCalls).toBe(101);
+    expect(salvageTimersOf(gw.runtime).size).toBe(0);
+    const states = c.received.filter((m): m is StateMsg => m.type === 'state');
+    expect(states.at(-1)?.cells[0]?.state).toBe('FAILED'); // 放弃 ≠ 翻状态，格仍可手动重试
+    c.close();
+  });
+
+  it('重试接手后旧补捞定时器停止：RUNNING 期间不再 listFiles、状态不被补捞翻动', async () => {
+    dsh.failSkills.add('mono-color');
+    const { c, refs } = await setup([{}], 1);
+    c.send({ type: 'command', skillIds: ['mono-color'], imageRefs: refs, params: { title: 'a' } });
+    const settled = (await waitSettled(c)) as { cells: CellSnapshot[] };
+    expect(settled.cells[0].state).toBe('FAILED');
+    const sid = dsh.prompts[0].sessionId;
+    await until(() => salvageTimersOf(gw.runtime).size === 1); // 补捞已启动
+
+    // 用户重试：hold 技能让格停在 RUNNING；格离开 FAILED 后旧补捞 tick 应自清
+    const release = dsh.holdSkill('mono-color');
+    dsh.failSkills.delete('mono-color');
+    const mark = c.received.length;
+    c.send({ type: 'command', cellId: 'cell_01', params: { title: 'b' } });
+    await c.waitFor((m) => m.type === 'state' && m.state === 'RUNNING', 8000, mark);
+    await settle(100); // 略超一个补捞周期：让在途/末次 tick 完成清理
+    expect(salvageTimersOf(gw.runtime).size).toBe(0);
+
+    // 定时器已清理 → 之后不再 listFiles；期间塞入的迟到图不会被旧补捞登记/下发
+    const calls = dsh.listFilesCalls;
+    dsh.sessions.get(sid)!.set('late-01.png', Buffer.from('late-png'));
+    await settle(200);
+    expect(dsh.listFilesCalls).toBe(calls);
+    const during = c.received.slice(mark);
+    expect(during.some((m) => m.type === 'result')).toBe(false);
+    expect(
+      during.some((m) => m.type === 'state' && m.cells[0]?.state === 'AWAITING_MODIFY_OR_CONFIRM'),
+    ).toBe(false);
+
+    // 放行重试：正常落定，产出照常登记
+    release();
+    const done = (await waitSettled(c, 8000, mark)) as { cells: CellSnapshot[] };
+    expect(done.cells[0].state).toBe('AWAITING_MODIFY_OR_CONFIRM');
+    expect(done.cells[0].outputs.length).toBeGreaterThanOrEqual(1);
+    c.close();
+  });
+
+  it('stopSalvage()/close() 后无残留补捞定时器：salvageTimers 清空、后续不再 listFiles', async () => {
+    dsh.failSkills.add('mono-color');
+    const { c, refs } = await setup([{}], 1);
+    c.send({ type: 'command', skillIds: ['mono-color'], imageRefs: refs, params: { title: 'a' } });
+    const settled = (await waitSettled(c)) as { cells: CellSnapshot[] };
+    expect(settled.cells[0].state).toBe('FAILED');
+    await until(() => salvageTimersOf(gw.runtime).size === 1);
+
+    // 1) stopSalvage()：定时器表立即清空，之后不再有 listFiles
+    gw.runtime.stopSalvage();
+    expect(salvageTimersOf(gw.runtime).size).toBe(0);
+    const calls = dsh.listFilesCalls;
+    await settle(150); // 3 个补捞周期
+    expect(dsh.listFilesCalls).toBe(calls);
+
+    // 2) close()（内部同走 stopSalvage）：再次启动补捞后关停，无残留定时器
+    const mark = c.received.length;
+    c.send({ type: 'command', cellId: 'cell_01', params: { title: 'b' } }); // 仍失败 → 重新启动补捞
+    await c.waitFor((m) => m.type === 'error' && m.cellId === 'cell_01', 8000, mark);
+    await until(() => salvageTimersOf(gw.runtime).size === 1);
+    await gw.close();
+    expect(salvageTimersOf(gw.runtime).size).toBe(0);
   });
 });
 

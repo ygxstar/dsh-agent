@@ -12,6 +12,8 @@ export class FakeDsh implements DshClient {
   readonly cancelled: string[] = [];
   /** 这些技能的 promptStream 抛 DSH_FAILED */
   readonly failSkills = new Set<string>();
+  /** 这些技能先落图再抛 DSH_FAILED（模拟 agent 已出图但流式执行报错） */
+  readonly failAfterOutputSkills = new Set<string>();
   /** 每段 delta 间延迟（毫秒），用于制造 RUNNING 窗口 */
   deltaMs = 0;
   /** 挂起的技能 → release() 后才继续 */
@@ -69,6 +71,7 @@ export class FakeDsh implements DshClient {
       files.set(`out-${String(n).padStart(2, '0')}.png`, Buffer.from(`fake-png:${sessionId}:${n}`));
       for (const extra of this.extraOutputs.get(sessionId) ?? []) files.set(extra, Buffer.from(`fake-extra:${extra}`));
     }
+    if (this.failAfterOutputSkills.has(skill)) throw new GatewayError('DSH_FAILED', `fake: ${skill} 出图后执行失败`);
   }
 
   /** 挂起某技能的执行，返回 release 函数 */
@@ -81,7 +84,11 @@ export class FakeDsh implements DshClient {
     };
   }
 
+  /** listFiles 调用计数（补捞停止/放弃类断言用） */
+  listFilesCalls = 0;
+
   async listFiles(sessionId: string): Promise<SessionFile[]> {
+    this.listFilesCalls += 1;
     const files = this.sessions.get(sessionId);
     if (!files) throw new GatewayError('DSH_FAILED', `unknown session ${sessionId}`);
     return [...files.entries()].map(([path, buf]) => ({ path, size: buf.length }));

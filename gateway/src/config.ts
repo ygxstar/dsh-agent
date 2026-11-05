@@ -21,6 +21,8 @@ export interface Config {
   stallTimeoutMs: number;
   /** 任务未确认过期窗口（毫秒），默认 24h */
   taskTtlMs: number;
+  /** 失败格迟到产出补捞周期（毫秒） */
+  salvageIntervalMs: number;
   /** 前端构建产物目录（存在则由网关托管静态页） */
   staticDir: string | null;
 }
@@ -46,6 +48,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     redeemRateLimit: num('REDEEM_RATE_LIMIT', 10),
     stallTimeoutMs: num('STALL_TIMEOUT_MS', 300_000),
     taskTtlMs: num('TASK_TTL_MS', 24 * 60 * 60 * 1000),
+    salvageIntervalMs: num('SALVAGE_INTERVAL_MS', 3000),
     staticDir: env.STATIC_DIR || null,
   };
 }
