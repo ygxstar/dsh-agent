@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { fetchSkills } from '../api';
 import ParamsForm from '../components/ParamsForm';
+import SkillHint from '../components/SkillHint';
 import { defaultsFor, fieldsFor, withCascade } from '../form';
 import { loadTokens, type StoredToken } from '../tokens';
 import type { SkillManifest } from '../types';
@@ -80,6 +81,8 @@ export default function SkillPage() {
           <input id="skill-text" type="text" value={text} onChange={(e) => setText(e.target.value)} />
         </div>
       </section>
+
+      <SkillHint skills={[skill]} />
 
       <section className="panel">
         <h2>选择令牌进入工作台</h2>

@@ -47,7 +47,7 @@ CREATED ──首个有效指令──▶ RUNNING ──DSH 返回──▶ AWAI
 
 ## 3. 技能清单（Manifest）
 
-网关静态配置 + 启动时与 dsh-webapi `GET /skills` 对账（不一致则告警并降级为网关侧清单）。仅含元数据，不含提示词语义：
+网关静态配置 + 启动时与 dsh-webapi `GET /skills` 对账（不一致则告警并降级为网关侧清单）。仅含元数据，不含提示词语义；`description`/`examples` 为面向客户的展示文案（可选），供前端选技能时提示功能与填法：
 
 ```jsonc
 [{
@@ -55,6 +55,8 @@ CREATED ──首个有效指令──▶ RUNNING ──DSH 返回──▶ AWAI
   "displayName": "单色海报",
   "kind": "img2img",                  // txt2img | img2img
   "requiresSourceImage": true,        // 首条是否必须携带源图
+  "description": "把源图转成高对比的单色网点海报…",   // 功能描述，选技能时展示
+  "examples": ["标题：填画面主文案…", "补充说明示例：…"],  // 用法举例，指导参数与补充说明填写
   "paramsSchema": {                   // JSON Schema：前端渲染表单 + 网关格式校验
     "type": "object",
     "properties": { "title": { "type": "string", "maxLength": 40 } },

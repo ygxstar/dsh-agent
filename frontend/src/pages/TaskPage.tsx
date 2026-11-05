@@ -4,6 +4,7 @@ import { fetchSkills } from '../api';
 import CellCard from '../components/CellCard';
 import ConfirmBar from '../components/ConfirmBar';
 import ParamsForm from '../components/ParamsForm';
+import SkillHint from '../components/SkillHint';
 import SkillPicker from '../components/SkillPicker';
 import UploadArea from '../components/UploadArea';
 import { errorText, FORM_ERROR_CODES } from '../errors';
@@ -324,6 +325,8 @@ export default function TaskPage() {
               <p className="muted">将生成 {cellCount} 个出图单元</p>
             )}
           </section>
+
+          <SkillHint skills={allowedSkills.filter((s) => selected.includes(s.id))} />
 
           <section className="panel">
             <h2>参数与说明</h2>

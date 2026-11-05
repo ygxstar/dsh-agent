@@ -206,6 +206,82 @@ button.ghost {
   color: var(--muted);
 }
 
+/* ---- 技能说明提示窗（宽屏吸顶，窄屏底部浮窗） ---- */
+.skill-hint {
+  position: sticky;
+  top: 8px;
+  z-index: 30;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 16px;
+  box-shadow: 0 2px 8px rgba(17, 24, 39, 0.06);
+}
+
+.skill-hint-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.skill-hint-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.skill-hint-names {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.skill-hint-head button {
+  margin-left: auto;
+  padding: 2px 10px;
+  font-size: 12px;
+  flex: 0 0 auto;
+}
+
+.skill-hint-body {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--line);
+  max-height: 40vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.skill-hint-item + .skill-hint-item {
+  margin-top: 10px;
+}
+
+.skill-hint-item h3 {
+  font-size: 13px;
+  margin: 0 0 4px;
+}
+
+.skill-hint-item p {
+  margin: 0 0 6px;
+}
+
+.skill-hint-label {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.skill-hint-item ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}
+
+.skill-hint-item li {
+  margin-bottom: 4px;
+}
+
 /* ---- 上传 ---- */
 .upload-drop {
   display: block;
@@ -430,4 +506,41 @@ button.ghost {
 .done-panel {
   text-align: center;
   padding: 48px 20px;
+}
+
+/* ---- 手机浏览器：技能说明改为底部固定浮窗，预留底部空间避免遮挡表单 ---- */
+@media (max-width: 640px) {
+  .skill-hint {
+    position: fixed;
+    top: auto;
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
+    z-index: 40;
+    padding: 8px 12px;
+    box-shadow: 0 6px 20px rgba(17, 24, 39, 0.18);
+  }
+
+  .skill-hint-body {
+    max-height: 42vh;
+  }
+
+  .page {
+    padding-bottom: 96px;
+  }
+
+  .skill-card {
+    min-width: 0;
+    flex: 1 1 140px;
+  }
+
+  input[type='text'],
+  input[type='number'],
+  select {
+    max-width: none;
+  }
+
+  .token-list li {
+    flex-wrap: wrap;
+  }
 }

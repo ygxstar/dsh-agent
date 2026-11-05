@@ -29,6 +29,7 @@
 | `store/task` | 任务快照：`{ taskId, state, preset, cells[] }`，`cells` 以 `cellId` 为键 |
 | `store/cells` | 每格：`{ skill, state, outputs[], progress, error }`；任务级 `state` 由格态派生显示 |
 | `form/skill-picker` | `GET /skills` 渲染 Manifest 目录；受 `preset.allowedSkillIds` 过滤、`preset.maxCells` 上限约束 |
+| `form/skill-hint` | 选技能后展示该技能 `description`/`examples`（功能描述与用法举例），指导参数与补充说明填写（§3.6） |
 | `form/params` | 按 Manifest `paramsSchema` 自动生成表单，`preset.params` 为预填值（可改） |
 | `upload/refs` | 选图 → `POST /upload` → 收集 `imageRefs[]`；任务已展开后禁用 |
 | `wall/cell-grid` | 单元图墙：每格显示进度流、产出图、错误与重试入口 |
@@ -67,6 +68,12 @@
 
 - 全部格到达可确认态才启用 `confirm`；一次提交（满意度评分）→ 等 `done` → 跳转回兑换页/完成页；
 - 确认后令牌即废，前端清除本地该令牌记录。
+
+### 3.6 技能说明提示（选技能 → 填参数）
+
+- 位于「选择技能」与「参数与说明」之间，展示所选技能的功能描述与用法举例（Manifest `description`/`examples`），未选技能时显示引导文案；
+- 宽屏 `position: sticky` 吸附视口顶部，滚动到参数表单时仍可见；≤640px 改为底部固定浮窗，默认折叠、点「看说明」展开（`max-height` 42vh 内滚动），页面预留底部 padding 避免遮挡提交按钮；
+- 多选技能时逐个技能分节展示；技能页（`/skill/:skillId`）复用同一组件。
 
 ## 4. WS 客户端细则
 

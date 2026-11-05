@@ -93,6 +93,12 @@ export const STATIC_MANIFEST: SkillManifest[] = [
     displayName: '单色海报',
     kind: 'img2img',
     requiresSourceImage: true,
+    description: '把源图转成高对比的单色网点海报，黑白印刷质感，适合活动海报、文创印刷与大头贴。',
+    examples: [
+      '标题：填画面主文案（≤40 字），如「向北步行」，会作为海报主标题排版',
+      '网点密度：选「粗网点」块面强烈、远看醒目；选「细网点」灰阶细腻、细节更多',
+      '补充说明示例：保留人物剪影，背景纯色留白，标题放在画面下方',
+    ],
     paramsSchema: {
       type: 'object',
       properties: {
@@ -107,6 +113,13 @@ export const STATIC_MANIFEST: SkillManifest[] = [
     displayName: '纸艺微缩世界',
     kind: 'img2img',
     requiresSourceImage: true,
+    description: '将照片环境重构为高级写实 3D 手工纸艺微缩世界：人物与宠物保持真实感，场景强纸艺化，并默认加入纸艺花卉与三层拼贴。',
+    examples: [
+      '标题：概括画面主题，如「海边的午后」',
+      '三个滑杆默认 92/92/95 已接近成品：场景纸艺化调到 100 环境更手工，主体真实感降到 70 整体更像插画',
+      '与原图一致性 ≥95 严格贴合原图人物动作，调到 80 允许更大胆的构图改造',
+      '补充说明示例：人物服装与动作保持原样，前景加入纸艺花丛',
+    ],
     paramsSchema: {
       type: 'object',
       properties: {
@@ -123,6 +136,12 @@ export const STATIC_MANIFEST: SkillManifest[] = [
     displayName: '照片故事风格',
     kind: 'img2img',
     requiresSourceImage: true,
+    description: '保留原图构图与元素布局，整体换成一种视觉材质（版画、水彩、白描、老照片等 63 种风格），把照片变成有故事感的画面。',
+    examples: [
+      '先选「风格分类」，再选「风格名」——风格名只列出该分类下的选项，如「绘画类 → 水彩画」',
+      '标题：填故事主题，如「春日河岸」，会作为画面题字/标题',
+      '补充说明示例：降低饱和度、留白多一些，边缘做旧泛黄',
+    ],
     paramsSchema: {
       type: 'object',
       properties: {
@@ -151,6 +170,12 @@ export const STATIC_MANIFEST: SkillManifest[] = [
     displayName: '涂鸦错觉人像',
     kind: 'img2img',
     requiresSourceImage: true,
+    description: '锁定参考图人脸，生成 3:4 竖版超写实街头人像：真人与同人物巨型 Q 版涂鸦壁画隔空比爱心的错觉互动。',
+    examples: [
+      '标题：概括场景，如「街角爱心互动」',
+      '需先上传正面清晰人像，五官会被严格保留，不换脸、不改脸',
+      '补充说明示例：穿白色 T 恤，墙面涂鸦写 GOOD VIBES，涂鸦不要遮挡脸和手',
+    ],
     paramsSchema: {
       type: 'object',
       properties: {
@@ -164,6 +189,12 @@ export const STATIC_MANIFEST: SkillManifest[] = [
     displayName: '第二世界海报',
     kind: 'img2img',
     requiresSourceImage: true,
+    description: '为每张照片独立生成一张 3:4 竖版「第二世界」海报：上半区保留原图摄影质感，下半区沿画面结构延伸出手绘拼贴世界。',
+    examples: [
+      '标题：填海报标题，如「向下的城市」',
+      '一张源图出一张海报；多张源图各出一张，不会合并进同一画面',
+      '补充说明示例：让楼梯向下延伸成手绘巷子，下半区留白多一些',
+    ],
     paramsSchema: {
       type: 'object',
       properties: {
@@ -177,6 +208,12 @@ export const STATIC_MANIFEST: SkillManifest[] = [
     displayName: '西方动画半身像',
     kind: 'img2img',
     requiresSourceImage: true,
+    description: '提取参考图人物特征，重构为现代西方动画概念原画半身像：3 渲 2 手绘粗粝笔触、米白留白 + 下方发色几何色面。',
+    examples: [
+      '标题：填角色名或主题，如「橘发少女」',
+      '补充说明示例：保留长发与耳饰，色面用发色的珊瑚橙，表情更沉稳',
+      '只提取人物身份特征，不复刻照片脸部与摄影质感',
+    ],
     paramsSchema: {
       type: 'object',
       properties: {
