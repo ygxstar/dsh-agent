@@ -107,4 +107,8 @@ export interface SkillManifest {
   kind: 'txt2img' | 'img2img';
   requiresSourceImage: boolean;
   paramsSchema: ParamsSchema;
+  /** 功能描述：选技能时提示，指导参数与补充说明的填写 */
+  description?: string;
+  /** 用法举例：参数/补充说明的填法示例 */
+  examples?: string[];
 }

@@ -8,6 +8,10 @@ export interface SkillManifest {
   kind: 'txt2img' | 'img2img';
   requiresSourceImage: boolean;
   paramsSchema: Record<string, unknown>;
+  /** 功能描述：前端选技能时展示，指导参数填写 */
+  description?: string;
+  /** 用法举例：参数/补充说明的填法示例 */
+  examples?: string[];
 }
 
 export interface SessionFile {
@@ -94,6 +98,8 @@ export class HttpDshClient implements DshClient {
       kind: (s.kind === 'txt2img' ? 'txt2img' : 'img2img') as SkillManifest['kind'],
       requiresSourceImage: s.requiresSourceImage !== false && s.kind !== 'txt2img',
       paramsSchema: (s.paramsSchema as Record<string, unknown>) ?? { type: 'object', properties: {} },
+      ...(typeof s.description === 'string' ? { description: s.description } : {}),
+      ...(Array.isArray(s.examples) ? { examples: s.examples.map((e) => String(e)) } : {}),
     })).filter((s) => s.id);
   }
 
