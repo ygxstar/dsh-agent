@@ -16,15 +16,21 @@ export interface TaskRuntimeDeps {
   log: Logger;
   stallTimeoutMs: number;
   taskTtlMs: number;
+  /** 失败格迟到产出补捞周期（毫秒） */
+  salvageIntervalMs: number;
 }
 
 const IMAGE_PATH_RE = /\.(png|jpe?g|webp|gif|bmp)$/i;
+/** 补捞上限：配合 salvageIntervalMs 约 5 分钟，之后放弃（失败格仍可手动重试） */
+const SALVAGE_MAX_ATTEMPTS = 100;
 
 /** 任务/单元状态机、状态聚合、产出登记、过期看门（backend-design §4/§5） */
 export class TaskRuntime {
   private readonly tasks = new Map<string, Task>();
   private emitFn: (taskId: string, event: Downlink) => void = () => undefined;
   private watchdog: NodeJS.Timeout | null = null;
+  /** 失败格补捞定时器（key = taskId/cellId） */
+  private readonly salvageTimers = new Map<string, NodeJS.Timeout>();
 
   constructor(private readonly deps: TaskRuntimeDeps) {}
 
@@ -172,24 +178,87 @@ export class TaskRuntime {
           err instanceof GatewayError && (err.code === 'DSH_FAILED' || err.code === 'DSH_TIMEOUT')
             ? err.code
             : 'DSH_FAILED';
-        cell.state = 'FAILED';
-        cell.error = { code, retryable: true };
-        this.deps.log.warn('cell.failed', { taskId: task.taskId, cellId: cell.cellId, code, msg: String(err) });
-        this.emitFn(task.taskId, {
-          type: 'error',
-          cellId: cell.cellId,
-          code,
-          retryable: true,
-          message: String(err instanceof Error ? err.message : err).slice(0, 300),
-        });
+        // 流报错/零产出时 agent 可能已落图：先补捞一次差量，捞到即视为完成（WS 活着即收到 result）
+        let salvaged = 0;
+        try {
+          salvaged = await this.discoverOutputs(task, cell);
+        } catch (salvageErr) {
+          this.deps.log.warn('cell.salvage_failed', { taskId: task.taskId, cellId: cell.cellId, err: String(salvageErr) });
+        }
+        if (salvaged > 0) {
+          cell.state = 'AWAITING_MODIFY_OR_CONFIRM';
+          cell.error = undefined;
+          this.deps.log.info('cell.salvaged', { taskId: task.taskId, cellId: cell.cellId, code });
+        } else {
+          cell.state = 'FAILED';
+          cell.error = { code, retryable: true };
+          this.deps.log.warn('cell.failed', { taskId: task.taskId, cellId: cell.cellId, code, msg: String(err) });
+          this.emitFn(task.taskId, {
+            type: 'error',
+            cellId: cell.cellId,
+            code,
+            retryable: true,
+            message: String(err instanceof Error ? err.message : err).slice(0, 300),
+          });
+          this.startSalvage(task.taskId, cell.cellId);
+        }
       }
       this.emitState(task);
     });
   }
 
-  /** 每格每轮结束后对格会话文件差量，新图登记为 out_*（backend-design §5）；真实 agent 产出常在子目录（如 deliverable/），递归下钻 */
-  private async discoverOutputs(task: Task, cell: Cell): Promise<void> {
-    if (!cell.sessionId) return;
+  /* ---------- 失败格迟到产出补捞：WS 活跃期间周期差量，把 agent 迟到的图推给前端 ---------- */
+
+  private startSalvage(taskId: string, cellId: string): void {
+    const key = `${taskId}/${cellId}`;
+    if (this.salvageTimers.has(key)) return;
+    const loop = (attempt: number): void => {
+      const timer = setTimeout(() => void this.salvageTick(key, attempt, loop), this.deps.salvageIntervalMs);
+      timer.unref?.();
+      this.salvageTimers.set(key, timer);
+    };
+    loop(1);
+  }
+
+  private async salvageTick(key: string, attempt: number, loop: (next: number) => void): Promise<void> {
+    const sep = key.indexOf('/');
+    const task = this.tasks.get(key.slice(0, sep));
+    const cell = task?.cells.get(key.slice(sep + 1));
+    // 停止条件：任务落定、无会话、或格已离开 FAILED（重试已开跑）
+    if (!task || !cell || !cell.sessionId || cell.state !== 'FAILED' || task.state === 'DONE' || task.state === 'EXPIRED') {
+      this.salvageTimers.delete(key);
+      return;
+    }
+    let found = 0;
+    try {
+      found = await this.discoverOutputs(task, cell);
+    } catch (err) {
+      this.deps.log.warn('cell.salvage_failed', { taskId: task.taskId, cellId: cell.cellId, err: String(err) });
+    }
+    // 补到图 → 翻回可确认态（期间格被重试接手则不动状态，只保留已登记产出）
+    if (found > 0 && cell.state === 'FAILED') {
+      this.salvageTimers.delete(key);
+      cell.state = 'AWAITING_MODIFY_OR_CONFIRM';
+      cell.error = undefined;
+      this.deps.log.info('cell.salvaged', { taskId: task.taskId, cellId: cell.cellId, attempt });
+      this.emitState(task);
+      return;
+    }
+    if (attempt >= SALVAGE_MAX_ATTEMPTS) {
+      this.salvageTimers.delete(key);
+      return;
+    }
+    loop(attempt + 1);
+  }
+
+  stopSalvage(): void {
+    for (const timer of this.salvageTimers.values()) clearTimeout(timer);
+    this.salvageTimers.clear();
+  }
+
+  /** 每格每轮结束后对格会话文件差量，新图登记为 out_*（backend-design §5）；真实 agent 产出常在子目录（如 deliverable/），递归下钻。返回本轮新登记数量 */
+  private async discoverOutputs(task: Task, cell: Cell): Promise<number> {
+    if (!cell.sessionId) return 0;
     const known = this.deps.files.pathsOf(cell.cellId);
     const walked = new Set<string>();
     const found: SessionFile[] = [];
@@ -214,11 +283,16 @@ export class TaskRuntime {
       }
     };
     await walk(undefined, 2);
-    for (const f of found) {
+    // await 后按登记表重新判重：补捞 tick 与重试轮可能并发做差量（同一路径双登记 → 双 ref/双 result）。
+    // 判重到登记之间无 await，先恢复者落库、后恢复者在此跳过；后续轮次的新图不受影响（未登记过 → 仍会入列）
+    const registered = this.deps.files.pathsOf(cell.cellId);
+    const fresh = found.filter((f) => !registered.has(f.path));
+    for (const f of fresh) {
       const entry = this.deps.files.registerOutput(cell.sessionId, f.path, cell.cellId);
       cell.outputs.push(entry.ref);
       this.emitFn(task.taskId, { type: 'result', cellId: cell.cellId, imageRef: entry.ref, url: `/files/${entry.ref}` });
     }
+    return fresh.length;
   }
 
   /* ---------- 确认与过期 ---------- */

@@ -51,7 +51,16 @@ export async function createGateway(options: CreateGatewayOptions = {}): Promise
   const files = new FileRegistry();
   const scheduler = new Scheduler(config.maxConcurrentCells);
   const validator = new Validator({ manifest, files, commandRateLimit: config.commandRateLimit });
-  const runtime = new TaskRuntime({ dsh, files, scheduler, tokens, log, stallTimeoutMs: config.stallTimeoutMs, taskTtlMs: config.taskTtlMs });
+  const runtime = new TaskRuntime({
+    dsh,
+    files,
+    scheduler,
+    tokens,
+    log,
+    stallTimeoutMs: config.stallTimeoutMs,
+    taskTtlMs: config.taskTtlMs,
+    salvageIntervalMs: config.salvageIntervalMs,
+  });
 
   const deps: HttpApiDeps = { config, tokens, codes, runtime, files, manifest, dsh, validator, log };
   const publicServer = createPublicServer(deps);
@@ -86,6 +95,7 @@ export async function createGateway(options: CreateGatewayOptions = {}): Promise
     },
     async close() {
       runtime.stopWatchdog();
+      runtime.stopSalvage();
       ws.close();
       await Promise.all([
         new Promise<void>((resolve) => publicServer.close(() => resolve())),

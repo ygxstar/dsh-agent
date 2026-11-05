@@ -20,6 +20,7 @@ export function testConfig(overrides: Partial<Config> = {}): Config {
     redeemRateLimit: 10,
     stallTimeoutMs: 2000,
     taskTtlMs: 24 * 60 * 60 * 1000,
+    salvageIntervalMs: 50,
     staticDir: null,
     ...overrides,
   };
