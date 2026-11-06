@@ -17,6 +17,12 @@ const PONG_DEADLINE_MS = 35_000;
 const BACKOFF_BASE_MS = 1_000;
 const BACKOFF_MAX_MS = 30_000;
 
+export interface TaskWsOptions {
+  /** viewer = 只读分享连接：auth 带 role/taskId，服务端拒绝一切写指令（ADR-0008） */
+  role?: 'owner' | 'viewer';
+  taskId?: string;
+}
+
 export class TaskWs {
   private ws: WebSocket | null = null;
   private stopped = false;
@@ -27,6 +33,7 @@ export class TaskWs {
   constructor(
     private readonly token: string,
     private readonly handlers: WsHandlers,
+    private readonly opts: TaskWsOptions = {},
   ) {}
 
   start(): void {
@@ -61,7 +68,11 @@ export class TaskWs {
     ws.onopen = () => {
       this.attempt = 0;
       this.lastAlive = Date.now();
-      this.send({ type: 'auth', token: this.token });
+      this.send(
+        this.opts.role === 'viewer'
+          ? { type: 'auth', role: 'viewer', token: this.token, taskId: this.opts.taskId }
+          : { type: 'auth', token: this.token },
+      );
       this.startHeartbeat();
       this.handlers.onStatus('open');
     };

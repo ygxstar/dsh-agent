@@ -8,6 +8,7 @@ import { createAdminServer, createPublicServer, type HttpApiDeps } from './http-
 import { createLogger, type Logger } from './logger.js';
 import { ManifestStore } from './manifest.js';
 import { Scheduler } from './scheduler.js';
+import { ShareStore } from './share-store.js';
 import { TaskRuntime } from './task-runtime.js';
 import { TokenStore } from './token-store.js';
 import { Validator } from './validation.js';
@@ -48,6 +49,7 @@ export async function createGateway(options: CreateGatewayOptions = {}): Promise
 
   const tokens = new TokenStore();
   const codes = new CodeStore();
+  const shares = new ShareStore();
   const files = new FileRegistry();
   const scheduler = new Scheduler(config.maxConcurrentCells);
   const validator = new Validator({ manifest, files, commandRateLimit: config.commandRateLimit });
@@ -62,7 +64,7 @@ export async function createGateway(options: CreateGatewayOptions = {}): Promise
     salvageIntervalMs: config.salvageIntervalMs,
   });
 
-  const deps: HttpApiDeps = { config, tokens, codes, runtime, files, manifest, dsh, validator, log };
+  const deps: HttpApiDeps = { config, tokens, codes, shares, runtime, files, manifest, dsh, validator, log };
   const publicServer = createPublicServer(deps);
   const adminServer = createAdminServer(deps);
   const ws = new WsServer(deps);

@@ -259,7 +259,7 @@ export class TaskRuntime {
   /** 每格每轮结束后对格会话文件差量，新图登记为 out_*（backend-design §5）；真实 agent 产出常在子目录（如 deliverable/），递归下钻。返回本轮新登记数量 */
   private async discoverOutputs(task: Task, cell: Cell): Promise<number> {
     if (!cell.sessionId) return 0;
-    const known = this.deps.files.pathsOf(cell.cellId);
+    const known = this.deps.files.pathsOfSession(cell.sessionId);
     const walked = new Set<string>();
     const found: SessionFile[] = [];
     const walk = async (subdir: string | undefined, depth: number): Promise<void> => {
@@ -285,7 +285,7 @@ export class TaskRuntime {
     await walk(undefined, 2);
     // await 后按登记表重新判重：补捞 tick 与重试轮可能并发做差量（同一路径双登记 → 双 ref/双 result）。
     // 判重到登记之间无 await，先恢复者落库、后恢复者在此跳过；后续轮次的新图不受影响（未登记过 → 仍会入列）
-    const registered = this.deps.files.pathsOf(cell.cellId);
+    const registered = this.deps.files.pathsOfSession(cell.sessionId);
     const fresh = found.filter((f) => !registered.has(f.path));
     for (const f of fresh) {
       const entry = this.deps.files.registerOutput(cell.sessionId, f.path, cell.cellId);
