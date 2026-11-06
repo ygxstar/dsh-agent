@@ -6,7 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { chromium, type Browser, type Page } from 'playwright';
 import { createStubDsh, type StubDsh } from 'stub-dsh';
 import type { Gateway } from '../src/app.js';
-import { json, startGateway } from './helpers.js';
+import { authedWs, json, startGateway, uploadImage } from './helpers.js';
 
 /** 接缝 4：浏览器端到端（兑换 → 上传 → 出图 → 修改 → 确认）。
  *  需要先构建前端：npm run build -w frontend（缺失时跳过，`npm run e2e` 会先构建）。 */
@@ -127,6 +127,63 @@ describe.skipIf(!hasDist)('端到端：浏览器 × 网关 × stub', () => {
     expect(pageErrors).toEqual([]);
     expect(consoleErrors.filter((t) => !t.includes('Failed to load resource'))).toEqual([]);
   }, 120_000);
+
+  it('只读分享：viewer 无令牌打开链接只读查看并实时同步，停止分享后即 403', async () => {
+    /* owner 侧：准备一个已出图并待确认的任务，再签发分享令牌 */
+    const issued = await json<{ tokens: Array<{ token: string; taskId: string }> }>(`${gw.adminUrl}/admin/tokens`, 'POST', {
+      orderRef: 'ORD-SHARE',
+      tasks: [{}],
+      codeExpiresAt: future(),
+    });
+    expect(issued.status).toBe(200);
+    const { token, taskId } = issued.data.tokens[0];
+    const up = await uploadImage(`${gw.publicUrl}/upload`, token, new Uint8Array(PNG));
+    expect(up.status).toBe(200);
+    const owner = await authedWs(gw.wsUrl, token);
+    owner.send({ type: 'command', skillIds: ['mono-color'], imageRefs: [String(up.data.imageRef)], params: { title: '向北步行' } });
+    await owner.waitFor((m) => m.type === 'state' && m.state === 'AWAITING_MODIFY_OR_CONFIRM', 30_000);
+
+    const share = await json<{ sh: string }>(`${gw.publicUrl}/task/${taskId}/share`, 'POST', undefined, {
+      authorization: `Bearer ${token}`,
+    });
+    expect(share.status).toBe(200);
+    const sh = share.data.sh;
+    expect(sh).toMatch(/^sh_/);
+
+    /* viewer：全新浏览器上下文（无 tk_*）打开分享链接 */
+    const vctx = await browser.newContext();
+    const vp = await vctx.newPage();
+    await vp.goto(`${gw.publicUrl}/task/${taskId}?sh=${sh}`);
+    await vp.waitForSelector('.readonly-badge', { timeout: 15_000 });
+    expect(await vp.locator('.readonly-badge').textContent()).toContain('只读分享');
+    expect(await vp.locator('.cell-card').count()).toBe(1);
+    await vp.waitForSelector('.cell-outputs img', { timeout: 15_000 });
+    expect(await vp.evaluate(() => localStorage.getItem('dsh.tokens'))).toBeNull();
+
+    /* 只读：一切写控件隐藏 */
+    expect(await vp.locator('.confirm-bar').count()).toBe(0);
+    expect(await vp.locator('input[type="file"]').count()).toBe(0);
+    expect(await vp.getByRole('button', { name: '开始生成' }).count()).toBe(0);
+    expect(await vp.getByRole('button', { name: '修改' }).count()).toBe(0);
+    expect(await vp.getByRole('button', { name: '分享' }).count()).toBe(0);
+
+    /* 实时同步：owner 下发修改指令 → viewer 免刷新看到第二张产出 */
+    owner.send({ type: 'command', cellId: 'cell_01', params: { title: '标题改一版' } });
+    await vp.waitForFunction(
+      () => (document.querySelector('.cell-outputs')?.querySelectorAll('img').length ?? 0) >= 2,
+      undefined,
+      { timeout: 30_000 },
+    );
+
+    /* 停止分享 → 旧链接下一次请求（刷新）即 403，页面就地提示 */
+    const del = await json(`${gw.publicUrl}/task/${taskId}/share`, 'DELETE', undefined, { authorization: `Bearer ${token}` });
+    expect(del.status).toBe(200);
+    await vp.reload();
+    await vp.getByText('分享链接无效').waitFor({ timeout: 15_000 });
+
+    await vctx.close();
+    owner.close();
+  }, 90_000);
 
   it('兑换页：未知收货码 → 中文错误提示', async () => {
     await page.goto(gw.publicUrl);

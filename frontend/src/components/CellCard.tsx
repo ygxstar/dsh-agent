@@ -14,6 +14,8 @@ interface Props {
   /** 首条指令的 params，作为逐格修改表单初值 */
   initialParams: Record<string, unknown>;
   onSend: (msg: CommandMsg) => void;
+  /** 只读分享视图（ADR-0008）：隐藏修改/重试等一切操作控件 */
+  readOnly?: boolean;
 }
 
 const STATE_TEXT: Record<string, string> = {
@@ -25,14 +27,14 @@ const STATE_TEXT: Record<string, string> = {
   EXPIRED: '已过期',
 };
 
-export default function CellCard({ cell, skill, sourceRef, initialParams, onSend }: Props) {
+export default function CellCard({ cell, skill, sourceRef, initialParams, onSend, readOnly }: Props) {
   const [editing, setEditing] = useState(false);
   const [params, setParams] = useState<Record<string, unknown>>(initialParams);
   const [editTarget, setEditTarget] = useState('');
   const [text, setText] = useState('');
   const [formErr, setFormErr] = useState<string | null>(null);
 
-  const modifiable = cell.state === 'AWAITING_MODIFY_OR_CONFIRM' || cell.state === 'FAILED';
+  const modifiable = !readOnly && (cell.state === 'AWAITING_MODIFY_OR_CONFIRM' || cell.state === 'FAILED');
   const err = cell.lastError ?? (cell.error ? { code: cell.error.code, retryable: cell.error.retryable } : undefined);
   const fields = skill ? fieldsFor([skill], [skill.id]) : [];
 
@@ -85,13 +87,15 @@ export default function CellCard({ cell, skill, sourceRef, initialParams, onSend
       )}
       {formErr && <p className="cell-error">{formErr}</p>}
 
-      <footer className="cell-actions">
-        {modifiable && !editing && (
-          <button type="button" onClick={() => setEditing(true)}>
-            修改
-          </button>
-        )}
-      </footer>
+      {!readOnly && (
+        <footer className="cell-actions">
+          {modifiable && !editing && (
+            <button type="button" onClick={() => setEditing(true)}>
+              修改
+            </button>
+          )}
+        </footer>
+      )}
 
       {editing && (
         <div className="cell-editor">

@@ -82,7 +82,8 @@ export interface Task {
 
 /* ---------- WS 上行（客户端 → 网关） ---------- */
 
-export interface AuthMsg { type: 'auth'; token: string }
+/** auth：owner 带登录令牌 tk_*；role=viewer 时 token 为分享令牌 sh_*，taskId 必填且须与分享条目一致（ADR-0008） */
+export interface AuthMsg { type: 'auth'; token: string; role?: 'viewer'; taskId?: string }
 export interface CommandMsg {
   type: 'command';
   skillIds?: string[];
@@ -114,6 +115,7 @@ export const ERROR_CODES = [
   'REDEEM_INVALID', 'REDEEM_EXPIRED', 'REDEEM_REVOKED',
   'STATE_INVALID', 'SKILL_UNKNOWN', 'SKILL_LOCKED', 'EDIT_TARGET_INVALID', 'IMAGE_REF_INVALID', 'BAD_PARAMS',
   'LIMIT', 'PAYLOAD_TOO_LARGE',
+  'SHARE_INVALID', 'READONLY',
   'DSH_FAILED', 'DSH_TIMEOUT',
 ] as const;
 export type ErrorCode = (typeof ERROR_CODES)[number];

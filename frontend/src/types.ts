@@ -19,9 +19,12 @@ export interface CellSnapshot {
 }
 
 /* ---- WS 上行 ---- */
+/** auth：owner 带登录令牌 tk_*；role=viewer 时 token 为分享令牌 sh_*（ADR-0008 只读分享） */
 export interface AuthMsg {
   type: 'auth';
   token: string;
+  role?: 'viewer';
+  taskId?: string;
 }
 export interface CommandMsg {
   type: 'command';

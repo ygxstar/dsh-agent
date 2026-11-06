@@ -40,9 +40,10 @@ export class FileRegistry {
     return [...this.byRef.values()].filter((e) => e.cellId === cellId && e.kind === 'output').map((e) => e.ref);
   }
 
-  /** 该格已登记产出的工作区路径（产出差量用） */
-  pathsOf(cellId: string): Set<string> {
-    return new Set([...this.byRef.values()].filter((e) => e.cellId === cellId).map((e) => e.path));
+  /** 该会话下已登记的工作区路径：产出差量判重按会话而非 cellId——cellId 只在任务内唯一，
+   *  不同任务的同名格（如都有 cell_01）在不同会话产出同名文件时会互相误判为已登记 */
+  pathsOfSession(sessionId: string): Set<string> {
+    return new Set([...this.byRef.values()].filter((e) => e.sessionId === sessionId).map((e) => e.path));
   }
 
   /** 该任务（staging 会话）下已登记的源图引用 */

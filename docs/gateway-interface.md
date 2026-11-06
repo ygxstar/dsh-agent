@@ -23,6 +23,7 @@ DSH 容器（toddpan/dsh-webapi，前缀 /api/v1）→ 技能 → MCP → APIMar
 5. **产出登记**：逐轮对 DSH 会话文件做差量，登记本任务产出图引用，供 `editTarget` 校验、状态快照与重连恢复。
 6. **文件纯代理**：源图上传与结果图下发均透传 dsh-webapi 文件路由，网关不落盘、无持久存储（任务态仅内存 + 结构化日志）。
 7. **管理员 API**：签发令牌与收货码、列表、吊销令牌/收货码（仅内网暴露）。
+8. **任务只读分享**：每任务至多一个有效分享令牌 `sh_*`（随机 base64url、24h TTL、与任务同生同灭、重新分享即轮换、停止分享即撤销）；凭分享链接可只读查看任务快照与实时推送，不可执行任何写操作（见 [ADR-0008](adr/0008-readonly-task-sharing.md)，亦记入 [GLOSSARY](../GLOSSARY.md)）。
 
 **非职责**：任何 LLM 调用、提示词模板拼装与语义理解、APIMart 调用、用户账号体系、图片加工逻辑。
 
@@ -76,7 +77,10 @@ CREATED ──首个有效指令──▶ RUNNING ──DSH 返回──▶ AWAI
 | `DELETE /admin/tokens/:token` | 吊销单个令牌（仅内网） |
 | `POST /admin/codes/:code/revoke` | 吊销收货码（仅内网）；联动作废该码下未使用令牌 |
 | `POST /redeem` `{ code }` | **公网**：凭收货码领取令牌列表，返回 `{ tokens: [{ token, taskId, preset? }] }`；有效期内可重复领取，单码限频（错误/过期/吊销 → `REDEEM_*`，限频 → `LIMIT`） |
-| `POST /auth` `{ token }` | 校验令牌，返回 `{ taskId, state, preset, cells: [...] }`（`preset` 即任务要求表单，`cells` 为全格快照）；WS `auth` 的 HTTP 等价，供首登与断线恢复 |
+| `POST /auth` `{ token }` 或 `{ sh, taskId }` | 校验令牌，返回 `{ taskId, state, preset, cells: [...] }`（`preset` 即任务要求表单，`cells` 为全格快照）；WS `auth` 的 HTTP 等价，供首登与断线恢复。**只读通道**：带 `sh`（分享令牌）时不校验 `tk_*`，`sh` 无效/已撤销/与 `taskId` 不匹配/任务已过期 → `403 SHARE_INVALID`（见 [ADR-0008](adr/0008-readonly-task-sharing.md)） |
+| `GET /task/:taskId/share` | 分享状态回显（owner，`Authorization: Bearer tk_*` 且须属本任务）：`{ taskId, shared, sh? }` |
+| `POST /task/:taskId/share` | 签发/轮换分享令牌（owner 同上）：`{ taskId, sh }`；重复调用即轮换，旧 `sh` 立即失效；任务不存在/已过期 → `403 SHARE_INVALID` |
+| `DELETE /task/:taskId/share` | 停止分享（owner 同上，幂等）：`{ taskId, shared: false, revoked }`，撤销后旧链接下一次请求即 `403`；`sh_*` 调用本组端点 → `403 SHARE_INVALID` |
 | `GET /skills` | 返回 Manifest 数组（§3），前端渲染目录与差异化表单 |
 | `POST /upload` | multipart 上传（仅图片 MIME、限首条一次），透传 DSH 会话工作区，返回 `{ imageRef }` |
 | `GET /files/:ref` | 代理下载（源图 `img_*`、产出图 `out_*`），底层为 dsh-webapi 文件下载路由 |
@@ -86,7 +90,8 @@ CREATED ──首个有效指令──▶ RUNNING ──DSH 返回──▶ AWAI
 客户端 → 网关：
 
 ```jsonc
-{ "type": "auth",    "token": "tk_..." }
+{ "type": "auth",    "token": "tk_..." }              // owner：登录令牌
+{ "type": "auth",    "token": "sh_...", "role": "viewer", "taskId": "..." }   // viewer：只读分享（ADR-0008）；sh 须与 taskId 匹配且任务未过期，否则 error SHARE_INVALID
 { "type": "command",
   "skillIds": ["mono-color", "poster-a"],   // 首条必填：与 imageRefs 做笛卡尔积展开单元；受 preset.allowedSkillIds 白名单约束
   "params": { "title": "向北步行" },         // 按 Manifest paramsSchema 校验（preset 预填值可被覆盖）
@@ -118,6 +123,7 @@ CREATED ──首个有效指令──▶ RUNNING ──DSH 返回──▶ AWAI
 |---|---|
 | 令牌 | `TOKEN_INVALID`、`TOKEN_EXPIRED`、`TOKEN_USED` |
 | 收货码 | `REDEEM_INVALID`、`REDEEM_EXPIRED`、`REDEEM_REVOKED`（领取限频归 `LIMIT`） |
+| 分享 | `SHARE_INVALID`（HTTP → `403`；WS viewer auth 失败同码）、`READONLY`（仅 WS：viewer 发 `command`/`confirm` 等写指令时确定性拒绝） |
 | 状态/校验 | `STATE_INVALID`、`SKILL_UNKNOWN`、`SKILL_LOCKED`、`EDIT_TARGET_INVALID`、`IMAGE_REF_INVALID`、`BAD_PARAMS` |
 | 限流/大小 | `LIMIT`、`PAYLOAD_TOO_LARGE` |
 | 后端 | `DSH_FAILED`、`DSH_TIMEOUT`（均带 `cellId`，格级可重试） |

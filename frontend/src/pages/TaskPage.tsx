@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
-import { fetchSkills } from '../api';
+import { ApiError, createShare, fetchSkills, getShare, revokeShare, shareAuth, type ShareStatus } from '../api';
 import CellCard from '../components/CellCard';
 import ConfirmBar from '../components/ConfirmBar';
 import ParamsForm from '../components/ParamsForm';
@@ -34,11 +34,19 @@ interface PreselectState {
   text?: string;
 }
 
+/** ApiError → 顶部错误视图（非 ApiError 归为不可重试） */
+const toErrView = (err: unknown): ErrView =>
+  err instanceof ApiError ? { code: err.code, message: err.message, retryable: false } : { code: String(err), retryable: false };
+
 export default function TaskPage() {
   const { taskId = '' } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
   const stored = tokenForTask(taskId);
+
+  /* 只读分享（ADR-0008）：URL 带 sh → viewer 模式，只读展示，不读本机 tk_* */
+  const shareToken = new URLSearchParams(location.search).get('sh');
+  const viewer = shareToken !== null;
 
   /* 技能页预绑定：取一次存入 ref，供 WS 回调与技能选择器读取 */
   const pre = useRef<PreselectState | null>((location.state as PreselectState | null) ?? null);
@@ -64,6 +72,12 @@ export default function TaskPage() {
   const [toast, setToast] = useState<ErrView | null>(null);
   const [satisfaction, setSatisfaction] = useState(5);
   const [confirming, setConfirming] = useState(false);
+
+  /* ---- 只读分享（ADR-0008） ---- */
+  const [shareDenied, setShareDenied] = useState(false); // sh 无效/已撤销/任务过期
+  const [shareOpen, setShareOpen] = useState(false); // 所有者分享面板
+  const [shareStatus, setShareStatus] = useState<ShareStatus | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const presetApplied = useRef(false);
   const firstCmdRef = useRef<{ skillIds: string[]; imageRefs: string[] } | null>(null);
@@ -129,14 +143,21 @@ export default function TaskPage() {
 
   const onFatal = useCallback(
     (code: string) => {
+      if (viewer) {
+        // viewer 授权失效 = 分享被停止/任务过期：就地提示，不跳兑换页
+        if (code === 'SHARE_INVALID') setShareDenied(true);
+        else setToast({ code, retryable: false });
+        return;
+      }
       if (stored) removeToken(stored.token);
       navigate('/', { state: { error: errorText(code) } });
     },
-    [navigate, stored],
+    [navigate, stored, viewer],
   );
 
   /* ---- WS 生命周期 ---- */
   useEffect(() => {
+    if (viewer) return; // viewer 走下方只读连接
     if (!stored) return;
     const ws = new TaskWs(stored.token, {
       onMessage,
@@ -151,7 +172,47 @@ export default function TaskPage() {
     };
     // onMessage/onFatal 均为稳定 useCallback
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stored?.token]);
+  }, [stored?.token, viewer]);
+
+  /* ---- viewer 只读 WS（ADR-0008）：state 推送与所有者一致，写指令由网关以 READONLY 拒绝 ---- */
+  useEffect(() => {
+    if (!viewer || !shareToken || shareDenied) return;
+    const ws = new TaskWs(
+      shareToken,
+      { onMessage, onStatus: setStatus, onTokenFatal: onFatal },
+      { role: 'viewer', taskId },
+    );
+    wsRef.current = ws;
+    ws.start();
+    return () => {
+      ws.stop();
+      wsRef.current = null;
+    };
+    // onMessage/onFatal 均为稳定 useCallback
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewer, shareToken, shareDenied, taskId]);
+
+  /* ---- viewer 首屏快照走只读 HTTP 通道：sh 无效/撤销/任务过期 → 403 就地提示 ---- */
+  useEffect(() => {
+    if (!viewer || !shareToken) return;
+    let dead = false;
+    shareAuth(shareToken, taskId)
+      .then((snap) => {
+        if (dead) return;
+        setPreset(snap.preset);
+        setTaskState(snap.state);
+        setCells((prev) => rebuildCells(snap.cells, prev));
+      })
+      .catch((err: unknown) => {
+        if (dead) return;
+        if (err instanceof ApiError && err.code === 'SHARE_INVALID') setShareDenied(true);
+        else setToast(toErrView(err));
+      });
+    return () => {
+      dead = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewer, shareToken, taskId]);
 
   /* ---- 技能清单 ---- */
   useEffect(() => {
@@ -243,6 +304,48 @@ export default function TaskPage() {
     setParams((p) => withCascade(fields, p, k, v));
   };
 
+  /* ---- 分享面板（owner，ADR-0008） ---- */
+  const shareUrl =
+    shareStatus?.shared && shareStatus.sh ? `${window.location.origin}/task/${taskId}?sh=${shareStatus.sh}` : '';
+
+  /** 打开分享面板时回读当前分享状态（回显既有链接） */
+  const toggleShare = (): void => {
+    const next = !shareOpen;
+    setShareOpen(next);
+    setCopied(false);
+    if (next && stored) getShare(stored.token, taskId).then(setShareStatus).catch((err) => setToast(toErrView(err)));
+  };
+
+  /** 生成/重新生成分享令牌：服务端保证每任务至多一个有效 sh_*，重复生成即轮换 */
+  const generateShare = (): void => {
+    if (!stored) return;
+    createShare(stored.token, taskId)
+      .then((s) => {
+        setShareStatus(s);
+        setCopied(false);
+      })
+      .catch((err) => setToast(toErrView(err)));
+  };
+
+  /** 停止分享：撤销后旧链接下一次请求即 403 */
+  const stopShare = (): void => {
+    if (!stored) return;
+    revokeShare(stored.token, taskId)
+      .then((s) => {
+        setShareStatus(s);
+        setCopied(false);
+      })
+      .catch((err) => setToast(toErrView(err)));
+  };
+
+  const copyShare = (): void => {
+    if (!shareUrl) return;
+    navigator.clipboard
+      .writeText(shareUrl)
+      .then(() => setCopied(true))
+      .catch(() => setToast({ code: 'CLIPBOARD_FAILED', message: '复制失败，请手动复制链接', retryable: false }));
+  };
+
   if (done) {
     return (
       <main className="page">
@@ -257,7 +360,19 @@ export default function TaskPage() {
     );
   }
 
-  if (!stored) {
+  if (shareDenied) {
+    return (
+      <main className="page">
+        <div className="panel">
+          <h1>分享链接无效</h1>
+          <p className="muted">该链接可能已被停止分享、任务已过期或不存在，请向分享者索取新链接。</p>
+          <Link to="/">返回首页</Link>
+        </div>
+      </main>
+    );
+  }
+
+  if (!stored && !viewer) {
     return (
       <main className="page">
         <div className="panel">
@@ -274,13 +389,58 @@ export default function TaskPage() {
       <header className="topbar">
         <h1>出图工作台</h1>
         <span className="muted">任务 {taskId}</span>
+        {viewer && <span className="readonly-badge">只读分享</span>}
         <span className={`conn conn-${status}`}>
           {status === 'open' ? '已连接' : status === 'connecting' ? '连接中…' : status === 'reconnecting' ? '重连中…' : '已断开'}
         </span>
-        <Link to="/" className="ghost-link">
-          返回兑换页
-        </Link>
+        <div className="topbar-actions">
+          {!viewer && (
+            <button type="button" className="share-btn" onClick={toggleShare}>
+              分享
+            </button>
+          )}
+          <Link to="/" className="ghost-link">
+            返回兑换页
+          </Link>
+        </div>
       </header>
+
+      {!viewer && shareOpen && (
+        <section className="panel share-panel">
+          <div className="share-head">
+            <h2>分享任务</h2>
+            <button type="button" className="share-btn" onClick={() => setShareOpen(false)}>
+              关闭
+            </button>
+          </div>
+          <p className="muted">拿到链接的人只能查看任务与出图进度，不能修改、重试或确认完成。</p>
+          {shareStatus?.shared && shareStatus.sh ? (
+            <>
+              <div className="share-link-row">
+                <input
+                  className="share-link"
+                  readOnly
+                  value={shareUrl}
+                  aria-label="分享链接"
+                  onFocus={(e) => e.currentTarget.select()}
+                />
+                <button type="button" className="primary" onClick={copyShare}>
+                  {copied ? '已复制' : '复制链接'}
+                </button>
+              </div>
+              <div className="share-actions">
+                <button type="button" onClick={stopShare}>
+                  停止分享
+                </button>
+              </div>
+            </>
+          ) : (
+            <button type="button" className="primary" onClick={generateShare}>
+              生成分享链接
+            </button>
+          )}
+        </section>
+      )}
 
       {toast && <div className="toast">{errorText(toast.code, toast.message)}</div>}
 
@@ -294,10 +454,10 @@ export default function TaskPage() {
         </dl>
       </section>
 
-      {!expanded && (
+      {!expanded && !viewer && (
         <>
           <UploadArea
-            token={stored.token}
+            token={stored?.token ?? ''}
             disabled={expanded || submitting}
             refs={imageRefs}
             onAdded={(refs) => setImageRefs((prev) => [...prev, ...refs])}
@@ -355,6 +515,12 @@ export default function TaskPage() {
         </>
       )}
 
+      {viewer && !expanded && (
+        <section className="panel">
+          <p className="muted">任务尚未开始生成，可在此查看实时进度</p>
+        </section>
+      )}
+
       {expanded && (
         <section className="panel">
           <h2>出图单元（{Object.keys(cells).length}）</h2>
@@ -366,6 +532,7 @@ export default function TaskPage() {
                 skill={skills.find((s) => s.id === cell.skill)}
                 sourceRef={sourceByCell[cell.cellId] ?? null}
                 initialParams={lastParamsRef.current}
+                readOnly={viewer}
                 onSend={(msg) => {
                   if (msg.cellId) setCells((prev) => clearCellError(prev, msg.cellId as string));
                   send(msg);
@@ -376,7 +543,7 @@ export default function TaskPage() {
         </section>
       )}
 
-      {expanded && (
+      {expanded && !viewer && (
         <ConfirmBar
           enabled={awaiting && !running}
           busy={confirming}

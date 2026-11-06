@@ -118,6 +118,24 @@ describe('首条指令：笛卡尔积展开', () => {
     c.close();
   });
 
+  it('同一网关多任务：不同任务的同名格（cell_01）产出互不串扰，后一个任务照常出图落定', async () => {
+    const a = await setup([{}], 1);
+    a.c.send({ type: 'command', skillIds: ['mono-color'], imageRefs: a.refs, params: { title: '任务甲' } });
+    const settledA = (await waitSettled(a.c)) as { cells: CellSnapshot[] };
+    expect(settledA.cells[0].cellId).toBe('cell_01');
+    expect(settledA.cells[0].outputs.length).toBeGreaterThanOrEqual(1);
+    a.c.close();
+
+    // 第二个任务同样展开出 cell_01，产出差量不得被前一任务同名格的登记记录误判为已登记
+    const b = await setup([{}], 1);
+    b.c.send({ type: 'command', skillIds: ['mono-color'], imageRefs: b.refs, params: { title: '任务乙' } });
+    const settledB = (await waitSettled(b.c)) as { cells: CellSnapshot[] };
+    expect(settledB.cells[0].state).toBe('AWAITING_MODIFY_OR_CONFIRM');
+    expect(settledB.cells[0].outputs.length).toBeGreaterThanOrEqual(1);
+    expect(b.c.received.filter((m) => m.type === 'result')).toHaveLength(settledB.cells[0].outputs.length);
+    b.c.close();
+  });
+
   it('首条提交后状态机推进：RUNNING 聚合在途格', async () => {
     dsh.deltaMs = 40; // 拉开执行窗口
     const { c, refs } = await setup([{}], 1);

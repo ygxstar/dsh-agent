@@ -14,6 +14,8 @@ const ERROR_TEXT: Record<string, string> = {
   BAD_PARAMS: '参数不符合要求',
   LIMIT: '操作过于频繁或超出数量上限',
   PAYLOAD_TOO_LARGE: '消息过大',
+  SHARE_INVALID: '分享链接无效、已停止分享或任务已过期',
+  READONLY: '只读分享不可执行该操作',
   DSH_FAILED: '生成失败，可重试',
   DSH_TIMEOUT: '生成超时，可重试',
 };
@@ -28,8 +30,8 @@ export const FORM_ERROR_CODES = new Set([
   'LIMIT',
 ]);
 
-/** 令牌类错误：停止重连并回兑换页 */
-export const TOKEN_ERROR_CODES = new Set(['TOKEN_INVALID', 'TOKEN_EXPIRED', 'TOKEN_USED']);
+/** 令牌/授权类错误：停止重连（owner 回兑换页，viewer 由任务页就地提示） */
+export const TOKEN_ERROR_CODES = new Set(['TOKEN_INVALID', 'TOKEN_EXPIRED', 'TOKEN_USED', 'SHARE_INVALID']);
 
 export function errorText(code: string, message?: string): string {
   return ERROR_TEXT[code] ?? message ?? `未知错误（${code}）`;

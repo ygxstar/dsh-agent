@@ -4,15 +4,16 @@ import { randomUUID } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { extname, join, normalize } from 'node:path';
 import type { Config } from './config.js';
-import { requireToken } from './auth.js';
+import { requireOwner, requireShare, requireToken } from './auth.js';
 import type { DshClient } from './dsh-client.js';
 import type { FileRegistry } from './files.js';
 import type { ManifestStore } from './manifest.js';
-import type { Logger } from './logger.js';
+import { hashToken, type Logger } from './logger.js';
 import type { CodeStore } from './code-store.js';
+import type { ShareStore } from './share-store.js';
 import type { TaskRuntime } from './task-runtime.js';
 import type { TokenStore } from './token-store.js';
-import type { Preset, Uplink } from './types.js';
+import type { Preset, Task, Uplink } from './types.js';
 import { GatewayError } from './types.js';
 import type { Validator } from './validation.js';
 
@@ -20,6 +21,7 @@ export interface HttpApiDeps {
   config: Config;
   tokens: TokenStore;
   codes: CodeStore;
+  shares: ShareStore;
   runtime: TaskRuntime;
   files: FileRegistry;
   manifest: ManifestStore;
@@ -65,13 +67,15 @@ function sendError(res: ServerResponse, err: unknown): void {
     const status =
       err.code.startsWith('TOKEN_') || err.code.startsWith('REDEEM_')
         ? 401
-        : err.code === 'PAYLOAD_TOO_LARGE'
-          ? 413
-          : err.code === 'LIMIT'
-            ? 429
-            : err.code === 'STATE_INVALID' || err.code === 'IMAGE_REF_INVALID'
-              ? 409
-              : 400;
+        : err.code === 'SHARE_INVALID'
+          ? 403
+          : err.code === 'PAYLOAD_TOO_LARGE'
+            ? 413
+            : err.code === 'LIMIT'
+              ? 429
+              : err.code === 'STATE_INVALID' || err.code === 'IMAGE_REF_INVALID'
+                ? 409
+                : 400;
     sendJson(res, status, { error: err.code, message: err.message });
     return;
   }
@@ -144,6 +148,13 @@ export function createPublicServer(deps: HttpApiDeps): Server {
         return sendJson(res, 200, deps.manifest.list());
       }
       if (req.method === 'POST' && path === '/upload') return await handleUpload(deps, req, res);
+      const shareMatch = path.match(/^\/task\/([^/]+)\/share$/);
+      if (shareMatch) {
+        const taskId = decodeURIComponent(shareMatch[1]);
+        if (req.method === 'POST') return handleShareCreate(deps, req, res, taskId);
+        if (req.method === 'GET') return handleShareStatus(deps, req, res, taskId);
+        if (req.method === 'DELETE') return handleShareRevoke(deps, req, res, taskId);
+      }
       if (req.method === 'GET' && path.startsWith('/files/')) return await handleFile(deps, req, res, path.slice('/files/'.length));
       if (req.method === 'GET') return serveStatic(deps, res, path);
       sendJson(res, 404, { error: 'NOT_FOUND' });
@@ -171,9 +182,18 @@ async function handleRedeem(deps: HttpApiDeps, req: IncomingMessage, res: Server
 
 async function handleAuth(deps: HttpApiDeps, req: IncomingMessage, res: ServerResponse): Promise<void> {
   const body = await readJson(req, deps.config.maxPayloadBytes);
-  const token = requireToken(deps.tokens, body.token);
-  const task = deps.runtime.get(token.taskId);
-  if (!task) throw new GatewayError('TOKEN_INVALID');
+  let task: Task;
+  if ('sh' in body) {
+    // 分享只读通道（ADR-0008）：sh_* + taskId 校验，不校验 tk_*；无效/撤销/任务过期/超 TTL → 403
+    const shared = requireShare(deps.shares, body.sh, body.taskId, deps.runtime, deps.config.taskTtlMs);
+    task = shared.task;
+    deps.log.info('auth.share', { taskId: task.taskId, sh: hashToken(shared.entry.token) });
+  } else {
+    const token = requireToken(deps.tokens, body.token);
+    const ownerTask = deps.runtime.get(token.taskId);
+    if (!ownerTask) throw new GatewayError('TOKEN_INVALID');
+    task = ownerTask;
+  }
   sendJson(res, 200, {
     taskId: task.taskId,
     state: task.state,
@@ -182,10 +202,44 @@ async function handleAuth(deps: HttpApiDeps, req: IncomingMessage, res: ServerRe
   });
 }
 
+/** 分享管理端点的 owner 鉴权：Bearer tk_* 且必须属于该任务（sh_* 一律 403） */
+function requireOwnerTask(deps: HttpApiDeps, req: IncomingMessage, taskId: string): void {
+  const auth = req.headers.authorization;
+  const bearer = typeof auth === 'string' && auth.startsWith('Bearer ') ? auth.slice(7) : undefined;
+  const token = requireOwner(deps.tokens, bearer);
+  if (token.taskId !== taskId) throw new GatewayError('TOKEN_INVALID');
+}
+
+/** 分享管理（owner）：签发/轮换该任务唯一分享令牌；POST 重复调用即轮换（ADR-0008） */
+function handleShareCreate(deps: HttpApiDeps, req: IncomingMessage, res: ServerResponse, taskId: string): void {
+  requireOwnerTask(deps, req, taskId);
+  const task = deps.runtime.get(taskId);
+  if (!task || task.state === 'EXPIRED') throw new GatewayError('SHARE_INVALID', '任务不存在或已过期');
+  const entry = deps.shares.create(taskId);
+  deps.log.info('share.created', { taskId, sh: hashToken(entry.token) });
+  sendJson(res, 200, { taskId, sh: entry.token });
+}
+
+/** 分享状态（owner）：当前有效分享令牌，供任务页回显分享链接 */
+function handleShareStatus(deps: HttpApiDeps, req: IncomingMessage, res: ServerResponse, taskId: string): void {
+  requireOwnerTask(deps, req, taskId);
+  const entry = deps.shares.getByTask(taskId);
+  if (entry) sendJson(res, 200, { taskId, shared: true, sh: entry.token });
+  else sendJson(res, 200, { taskId, shared: false });
+}
+
+/** 停止分享（owner）：删除内存条目，旧链接下一次请求即 403；幂等 */
+function handleShareRevoke(deps: HttpApiDeps, req: IncomingMessage, res: ServerResponse, taskId: string): void {
+  requireOwnerTask(deps, req, taskId);
+  const revoked = deps.shares.revoke(taskId);
+  if (revoked) deps.log.info('share.revoked', { taskId });
+  sendJson(res, 200, { taskId, shared: false, revoked });
+}
+
 async function handleUpload(deps: HttpApiDeps, req: IncomingMessage, res: ServerResponse): Promise<void> {
   const auth = req.headers.authorization;
   const bearer = typeof auth === 'string' && auth.startsWith('Bearer ') ? auth.slice(7) : undefined;
-  const token = requireToken(deps.tokens, bearer);
+  const token = requireOwner(deps.tokens, bearer); // viewer 凭 sh_* 调写端点 → 403
   const task = deps.runtime.get(token.taskId);
   if (!task) throw new GatewayError('TOKEN_INVALID');
   if (task.expanded) throw new GatewayError('STATE_INVALID', '首条指令已提交，任务内禁止再传新图');
